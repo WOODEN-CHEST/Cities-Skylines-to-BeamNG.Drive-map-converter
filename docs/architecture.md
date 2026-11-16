@@ -1,0 +1,111 @@
+# Architecture
+
+## Goal and scope
+
+Convert a Cities: Skylines (CS1) city into a BeamNG.drive level that is drivable and as close to the original as practical: terrain, water, the road network with AI traffic, buildings, props and trees.
+
+Non-goals:
+
+- simulating CS1 (citizens, economy);
+- converting Cities: Skylines II;
+- shipping any game content.
+
+## Pipeline
+
+```text
+Cities: Skylines (user's install + savegame + workshop assets)
+  │  Exporter (CS1 mod, C#, .NET Framework 3.5, runs inside the game)
+  ▼
+City dump (versioned folder)
+  │  Converter (.NET 10 library + CLI)
+  ▼
+BeamNG level in the user's BeamNG user folder (mods/unpacked/<mod>/levels/<level>/)
+```
+
+### Exporter (CS1 mod)
+
+- Runs inside the game and reads the loaded city from the game's managers and prefabs.
+- Uses the game's own code for anything derived (curves, corners, randomised placement, colours) instead of reimplementing it.
+- Extracts the meshes and textures of the prefabs the city uses (later phases).
+- Is strictly read-only: it never changes the simulation or the save.
+
+### Dump
+
+- A versioned folder: `manifest.json`, binary arrays for large data, JSON for structured data, and image/mesh files for assets.
+- Coordinates and units are game-native.
+- Specified in `dump-format.md` (planned).
+
+Why an intermediate format: exporting requires starting the game and loading the city, which takes minutes. Converting should take seconds, so it can be iterated on: dump once, convert many times.
+
+### Converter stages
+
+1. Load and validate the dump.
+2. Build the world model (game-native coordinates).
+3. Plan the area: area of interest, terrain grid, chunk grid.
+4. Terrain: heights, edits (road and building footprints), materials.
+5. Water: sea, lakes, rivers.
+6. Networks: drivable surfaces, AI roads, traffic signals, parking.
+7. Objects: buildings, props, trees (proxies or converted assets).
+8. Assets: meshes to Collada, textures to PNG for BeamNG's texture cooker, materials.
+9. Level assembly: scene tree, `info.json`, spawn points, previews.
+10. Write, install into the BeamNG user folder, report.
+
+### Output modes
+
+- **Clean:** the layout comes from the city, but only BeamNG's own assets and generated geometry are used. It contains no CS1 or workshop content, so it is the only candidate for sharing (still check the rules; see [legal.md](legal.md)).
+- **Full:** uses converted CS1 and workshop assets. Personal use only.
+
+## Coordinate systems
+
+- **CS1 (Unity):** metres, Y up, left-handed. X and Z are horizontal, the origin is the map centre, and the map spans ±8640 m.
+- **BeamNG (Torque-based):** metres, Z up, right-handed. X and Y are horizontal.
+- **Mapping:** BeamNG (x, y, z) = CS1 (x, z, y). This keeps the map unmirrored when seen from above.
+- **Meshes:** apply the same swap to positions and normals and reverse the triangle winding, because Unity treats clockwise triangles as front-facing and Collada counter-clockwise. Tangent handedness flips.
+- **Rotations:** CS1 rotates objects about the vertical axis with `AngleAxis(angle, Vector3.down)` (community sources). Our derivation says this equals a rotation of the same angle about BeamNG +Z. [inferred; verify with an asymmetric test object before relying on it]
+- **Heights:** BeamNG terrain heights can't be negative and are relative to the TerrainBlock's z. CS1 heights are 0–1024 m, so a direct mapping works.
+
+All of this lives in one converter module with unit tests.
+
+## Scale strategy
+
+CS1 maps are much larger than typical BeamNG levels: 17.28 km across, against about 4 km for the biggest official BeamNG terrain. Community maps reach about 12 km on 0.40.
+
+- **Area of interest:** by default the built-up area plus a margin. The rest of the map is left out, or at most shown as a low-detail backdrop.
+- **Terrain:** one TerrainBlock, with a power-of-two size of up to 8192 samples. The square size is chosen to fit the area; CS1's own terrain detail is 4–16 m, so 2–4 m BeamNG squares lose nothing.
+- **Chunking:** generated geometry (roads, proxies) is merged per tile to limit the object count.
+- **Instancing:** repeated meshes (trees, props, repeated buildings) become Forest items.
+- **LODs and texture budgets:** target a 6 GB GPU and downscale textures.
+- **Material slots:** BeamNG 0.40 has 8,192 bindless material slots (a community project reports hitting the limit). Deduplicate materials and use texture atlases to stay under it.
+
+## Roads and AI traffic
+
+- **Driving surfaces:** generated from the network geometry in phase 1. Later (phase 3) they come from CS1's own road meshes, bent exactly as the game bends them.
+- **AI:** invisible `DecalRoad`s (material `road_invisible`) follow the lanes and carry lane counts, direction and speed limits. BeamNG builds its navgraph from these, which gives AI traffic, GPS routes and the big map.
+- **Traffic lights and parking:** traffic lights become `signals.json` entries, and parking lanes become parking spots.
+
+## Robustness
+
+The inputs depend on reverse-engineered game internals and on whatever mods and workshop assets a city uses.
+
+- Validate the dump against its version, and fail with a clear message when it is incompatible.
+- Skip, log and count objects that fail; the conversion report lists them.
+- Keep game-specific knowledge isolated (in the exporter and in the BeamNG layer of the converter) and documented in [research/](research/README.md).
+
+## Testing strategy
+
+- Unit and golden-file tests in the converter and the dump library, with synthetic fixtures.
+- Purpose-built CS1 test cities (one road, junction or bridge type each), plus real saves.
+- End-to-end checks in BeamNG through its MCP server: load, screenshots, ground heights, AI routes, performance.
+
+## Decision log
+
+| # | Date | Decision | Why |
+|---|---|---|---|
+| D1 | 2026-11-16 | Export from inside CS1 with a mod instead of parsing `.crp` saves | The save payload is undocumented serializer output and no external parser exists. The game parses its own data (including DLC and mod data) and also provides meshes, textures and placement logic. |
+| D2 | 2026-11-16 | Versioned intermediate dump; converter runs outside the game | Fast iteration; game-specific code stays separated. |
+| D3 | 2026-11-16 | C# throughout (net35 mod, .NET 10 converter) | CS1 mods must be .NET 3.5 C#. One language allows shared dump code, and it is the maintainer's preference. |
+| D4 | 2026-11-16 | Collada (`.dae`) for meshes | The only mesh format in BeamNG's shipped content. |
+| D5 | 2026-11-16 | AI through invisible DecalRoads | Official maps build AI routes this way, and the navgraph code reads them. |
+| D6 | 2026-11-16 | Textures as PNG with `.color`/`.normal`/`.data` suffixes | BeamNG cooks them into compressed DDS itself. |
+| D7 | 2026-11-16 | Clean and full output modes | Shareable output must contain no third-party content. |
+| D8 | 2026-11-16 | Deterministic output | Meaningful diffs and golden tests. |

@@ -1,0 +1,97 @@
+# Code conventions
+
+The goal is a codebase one maintainer can keep developing for years, even though its inputs come from reverse-engineered game internals that will occasionally change or surprise us. Prefer clarity, isolation of fragile parts and good diagnostics over cleverness.
+
+## Architecture rules
+
+- Dependencies point one way: `Exporter → Dump ← Converter ← Cli`.
+  - **Exporter** (net35): the only code that touches CS1. It stays thin: read what the game knows, write the dump. No BeamNG knowledge.
+  - **Dump** (net35 + net10.0): the format model, readers and writers. No dependencies beyond the base class library, and no game or BeamNG knowledge.
+  - **Converter** (net10.0): all interpretation and generation. BeamNG-specific code (file formats, object classes, conventions) stays in its own namespace, so format changes in BeamNG updates are contained.
+  - **Cli** (net10.0): argument parsing and presentation only.
+- The converter is a pipeline of stages (see `docs/architecture.md`). Stages build in-memory results; only the writer and installer stages touch the file system.
+- Code that depends on reverse-engineered behaviour cites its source in a comment that links the relevant section of `docs/research/`, and that section links its evidence. If you are the one discovering the behaviour, write the research entry in the same change.
+- Validate inputs at the boundaries (dump reader, game APIs). Inside, trust the model types.
+
+## C# style
+
+- Follow `.editorconfig`; `dotnet format --verify-no-changes` must pass.
+- Use file-scoped namespaces, and make the namespace match the folder path.
+- Nullable reference types are enabled, warnings are errors, and .NET analyzers run at the recommended level. Never suppress a warning without a comment explaining why.
+- Keep types small and focused. Prefer immutable data (records, readonly structs) for model types. No static mutable state outside clearly marked caches.
+- Naming:
+  - PascalCase for types and members, `_camelCase` for private fields, no Hungarian prefixes.
+  - Put units in names where they would otherwise be ambiguous: `heightMeters`, `angleRadians`, `sizeCells`.
+- Comments explain *why*, not *what*. Public types and members of `Dump` and `Converter` get XML doc comments.
+- No magic numbers for format or game constants. Name them (`TerrainResolution = 1081`) and point to `docs/research/` for the source.
+
+## .NET 3.5 and Unity 5.6 constraints (Exporter, and the net35 build of Dump)
+
+The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base class library. The compiler catches missing APIs, but these are the usual traps:
+
+- **Not available:**
+  - `Task`/`async`, `ValueTuple`/`Tuple`, `Span<T>`, `Lazy<T>`
+  - `string.IsNullOrWhiteSpace`, `Enum.HasFlag`, `Stream.CopyTo`, `StringBuilder.Clear`
+  - `Path.Combine` with more than two arguments
+- **Avoid language features that need runtime or library support:** default interface members, `ref struct`, records and `init` (unless polyfilled), nullable attributes (polyfill them or disable nullable for net35).
+- **Threads:** call Unity APIs only on the main thread. Read simulation data consistently: on the simulation thread (`SimulationManager.AddAction`), or justify any other approach in a comment.
+- **Never modify game state.** The exporter only reads. Don't pause the simulation, change settings, or write into managers.
+- **One bad object must not abort an export.** Catch per object, log its id and prefab name, count the failures, and report them in the manifest.
+- **Locations:** use `ColossalFramework.IO.DataLocation`; never hard-code paths.
+- **Keep the exporter "dumb".** Dump what the game knows and interpret it in the converter, where iteration is cheap.
+
+## Cross-platform rules
+
+- **File-system paths:** build them with `Path.Combine` or `Path.Join`; never concatenate separators. Don't assume a case-insensitive file system.
+- **BeamNG virtual paths** inside level files always use `/` and start at the virtual root (`/levels/<level>/...`). Build them with the dedicated helper, never with `Path.Combine`.
+- **Generated names:** file and folder names are lowercase ASCII (`a-z0-9_-.`), and references must match them exactly, because Linux is case-sensitive.
+- **Culture:** format and parse every number and date with `CultureInfo.InvariantCulture`.
+  - Many machines, including the maintainer's (`LC_NUMERIC` is a decimal-comma locale), use decimal commas, which would corrupt JSON and other text formats.
+  - Tests that write numbers must also run once under a decimal-comma culture.
+- **Text output:** UTF-8 without BOM, `\n` line endings.
+- **Windows-only APIs** (such as the registry) go behind `OperatingSystem.IsWindows()`, with a Linux equivalent provided.
+- **Game locations:** never assume them. Go through the locator (step 0.2), with user overrides.
+
+## Data, coordinates and determinism
+
+- The dump stores game-native data: CS1/Unity coordinates, units and angles exactly as the game uses them. All conversion to BeamNG conventions happens in one converter module (see `docs/architecture.md`, "Coordinate systems").
+- Use metres and radians internally; convert units only at the boundaries.
+- Binary formats are little-endian, with explicit versioned headers, and are documented in `docs/dump-format.md`.
+- Output is deterministic, which keeps diffs and golden tests meaningful:
+  - stable ordering;
+  - no timestamps or random GUIDs in generated files (derive BeamNG `persistentId`s from stable keys);
+  - parallel work merged in a fixed order.
+
+## Errors, logging, diagnostics
+
+- Fail fast on unreadable or incompatible input, with a message that names the file, the version found and the version expected.
+- Degrade gracefully on individual objects: skip the object, log a warning with its identity, count it, and include the counts in the conversion report.
+- **Converter:** log through `Microsoft.Extensions.Logging` abstractions (or the logger chosen in step 0.1). The CLI prints a concise summary and writes a detailed log next to the output.
+- **Exporter:** write `export.log` in the dump folder, plus `[CsToBeamNG]`-prefixed lines in the game log.
+
+## Tests
+
+- xUnit covers `Dump` (its net10.0 build) and `Converter`. Tests must pass on Linux and Windows.
+- Kinds of test:
+  - unit tests for math (Béziers, transforms, resampling);
+  - golden-file tests for writers;
+  - round-trip tests for readers and writers.
+- Fixtures are synthetic or contain only layout data (positions, names). Never commit game meshes, textures or dumps as fixtures.
+- Every bug fix gets a regression test where feasible.
+- The exporter can't run outside the game, so keep testable logic (data shaping, encoding) in `Dump` or in pure helper classes.
+
+## Dependencies
+
+- Use central package management (`Directory.Packages.props`) and pin versions.
+- Allowed licenses: MIT, BSD, Apache-2.0, zlib, public domain. Anything else needs the maintainer's approval. Record every dependency (name, license, purpose) in `THIRD-PARTY-NOTICES.md`.
+- Prefer pure managed packages; avoid native binaries, which complicate Windows/Linux parity.
+- The exporter uses no NuGet dependencies besides what the game provides. The one exception is `CitiesHarmony.API`, if patching ever becomes necessary (prefer not to patch).
+
+## Performance
+
+Cities are big: tens of thousands of buildings, hundreds of thousands of trees and props, millions of vertices.
+
+- Stream large data; don't hold several copies of it.
+- Avoid LINQ and per-element allocations in hot loops; use arrays and `Span<T>` in the converter.
+- Parallelise independent work (per chunk, per asset), but keep the results deterministic.
+- In the exporter, keep the game responsive where practical (export in batches, show progress) and keep memory spikes bounded.

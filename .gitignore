@@ -1,0 +1,42 @@
+# Local agent workspace: development plan, step files, progress notes, scratch data.
+# Intentionally never committed; see agents/AGENTS.md.
+/agents/local/
+
+# Claude Code personal files
+/.claude/settings.local.json
+/CLAUDE.local.md
+
+# Local machine configuration (game paths and similar)
+Directory.Build.local.props
+*.local.json
+
+# Game data and conversion output. Never commit savegames, city dumps,
+# extracted assets or generated levels (see docs/legal.md).
+*.crp
+/dumps/
+/output/
+
+# .NET build output
+bin/
+obj/
+artifacts/
+TestResults/
+*.binlog
+*.nupkg
+
+# IDEs and editors
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
