@@ -1,0 +1,52 @@
+# Normalise text files to LF in the repository and in working trees on every OS.
+* text=auto eol=lf
+
+# Windows command scripts need CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary files: never convert line endings or diff them as text.
+# Images and textures
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+*.tga binary
+*.tif binary
+*.tiff binary
+*.ico binary
+*.dds binary
+*.psd binary
+*.exr binary
+*.hdr binary
+# Game and level data (never committed, see docs/legal.md; listed so accidents don't get corrupted)
+*.crp binary
+*.ter binary
+*.cdae binary
+*.r16 binary
+*.raw binary
+*.bin binary
+*.dat binary
+# Binaries, symbols and archives
+*.dll binary
+*.exe binary
+*.so binary
+*.dylib binary
+*.pdb binary
+*.mdb binary
+*.nupkg binary
+*.snupkg binary
+*.zip binary
+*.7z binary
+*.gz binary
+*.tgz binary
+*.xz binary
+# Fonts and audio
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.ogg binary
+*.wav binary
+*.mp3 binary

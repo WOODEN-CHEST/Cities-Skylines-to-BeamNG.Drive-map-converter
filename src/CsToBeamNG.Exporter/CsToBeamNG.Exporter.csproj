@@ -1,0 +1,73 @@
+<Project>
+
+  <!--
+    The Cities: Skylines mod. It compiles against the game's own assemblies, so it builds only where
+    the game is installed (locations: Directory.Build.props). Elsewhere it is skipped with a message,
+    and the rest of the solution still builds and tests. The SDK is imported explicitly because the
+    skip logic at the end must come after Sdk.targets.
+  -->
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
+  <PropertyGroup>
+    <!-- The game runs mods on Unity 5.6's Mono with the .NET Framework 3.5 class library. -->
+    <TargetFramework>net35</TargetFramework>
+    <ModFolderName>CsToBeamNG</ModFolderName>
+    <!-- The "exporter skipped" warning (see ReportExporterSkipped) must not fail the build. -->
+    <MSBuildWarningsNotAsErrors>$(MSBuildWarningsNotAsErrors);CSTB001</MSBuildWarningsNotAsErrors>
+    <_GameManagedDir>$([MSBuild]::EnsureTrailingSlash('$(CitiesSkylinesManagedDir)'))</_GameManagedDir>
+    <CitiesSkylinesFound Condition="Exists('$(_GameManagedDir)Assembly-CSharp.dll')">true</CitiesSkylinesFound>
+    <DeployMod Condition="'$(DeployMod)' == '' and Exists('$(CitiesSkylinesModsDir)')">true</DeployMod>
+    <!-- Without the game assemblies the sources can't compile, so leave them out (also for IDEs and dotnet format). -->
+    <EnableDefaultCompileItems Condition="'$(CitiesSkylinesFound)' != 'true'">false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <!-- The game's assemblies: compile against them, never copy them (Private=false). -->
+  <ItemGroup Condition="'$(CitiesSkylinesFound)' == 'true'">
+    <Reference Include="Assembly-CSharp" HintPath="$(_GameManagedDir)Assembly-CSharp.dll" Private="false" />
+    <Reference Include="ColossalManaged" HintPath="$(_GameManagedDir)ColossalManaged.dll" Private="false" />
+    <Reference Include="ICities" HintPath="$(_GameManagedDir)ICities.dll" Private="false" />
+    <Reference Include="UnityEngine" HintPath="$(_GameManagedDir)UnityEngine.dll" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../CsToBeamNG.Dump/CsToBeamNG.Dump.csproj" />
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+
+  <!-- Without the game: replace the build with a notice, and succeed. -->
+  <PropertyGroup Condition="'$(CitiesSkylinesFound)' != 'true'">
+    <BuildDependsOn>ReportExporterSkipped</BuildDependsOn>
+  </PropertyGroup>
+
+  <!--
+    Locally the notice is a warning (CSTB001, exempt from warnings-as-errors above), because the
+    terminal logger hides messages and a wrong game path should be noticed. On CI, where the game is
+    never installed, it is a plain message, so every run doesn't carry a warning annotation.
+  -->
+  <Target Name="ReportExporterSkipped">
+    <PropertyGroup>
+      <_ExporterSkippedText>CsToBeamNG.Exporter skipped: Cities: Skylines assemblies not found in '$(CitiesSkylinesManagedDir)'. To build the mod, set CitiesSkylinesDir (see Directory.Build.local.props.example).</_ExporterSkippedText>
+    </PropertyGroup>
+    <Warning Code="CSTB001" Text="$(_ExporterSkippedText)" Condition="'$(ContinuousIntegrationBuild)' != 'true'" />
+    <Message Importance="high" Text="$(_ExporterSkippedText)" Condition="'$(ContinuousIntegrationBuild)' == 'true'" />
+  </Target>
+
+  <!--
+    Deploy our DLLs (the mod and its project references, such as the net35 Dump) into the game's mods
+    folder. Game assemblies are never copied: they are Private=false, so they aren't in
+    ReferenceCopyLocalPaths. Debug symbols are left out because Unity 5.6's Mono can't read portable PDBs.
+  -->
+  <Target Name="DeployMod" AfterTargets="Build" Condition="'$(CitiesSkylinesFound)' == 'true' and '$(DeployMod)' == 'true'">
+    <PropertyGroup>
+      <ModDeployDir>$([System.IO.Path]::Combine('$(CitiesSkylinesModsDir)', '$(ModFolderName)'))</ModDeployDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_ModFile Include="$(TargetPath)" />
+      <_ModFile Include="@(ReferenceCopyLocalPaths)" Condition="'%(Extension)' == '.dll'" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_ModFile)" DestinationFolder="$(ModDeployDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="Deployed the mod to $(ModDeployDir): @(_ModFile->'%(Filename)%(Extension)', ', ')" />
+  </Target>
+
+</Project>

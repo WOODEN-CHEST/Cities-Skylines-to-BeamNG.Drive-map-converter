@@ -1,0 +1,20 @@
+<Project>
+  <!-- Settings that depend on the target framework or on properties that project files set. -->
+
+  <!-- .NET Framework 3.5 builds: the exporter and the net35 build of Dump. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net35'">
+    <!--
+      Reference assemblies from NuGet on every OS. The SDK adds this package implicitly only when no
+      .NET 3.5 targeting pack is installed, so Windows machines could otherwise compile against
+      different reference assemblies than Linux and CI.
+    -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" PrivateAssets="all" />
+    <!-- .NET 3.5 lacks the nullable analysis attributes (NotNullWhen etc.); compile internal copies in. -->
+    <Compile Include="$(MSBuildThisFileDirectory)src/Shared/NullableAttributes.cs" Link="Shared/NullableAttributes.cs" />
+  </ItemGroup>
+
+  <!-- Missing XML comments on public API (CS1591) fail the build only where RequireXmlDocs is true. -->
+  <PropertyGroup Condition="'$(RequireXmlDocs)' != 'true'">
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CsToBeamNG.Cli/CsToBeamNG.Cli.csproj" />
+    <Project Path="src/CsToBeamNG.Converter/CsToBeamNG.Converter.csproj" />
+    <Project Path="src/CsToBeamNG.Dump/CsToBeamNG.Dump.csproj" />
+    <Project Path="src/CsToBeamNG.Exporter/CsToBeamNG.Exporter.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CsToBeamNG.Converter.Tests/CsToBeamNG.Converter.Tests.csproj" />
+    <Project Path="tests/CsToBeamNG.Dump.Tests/CsToBeamNG.Dump.Tests.csproj" />
+  </Folder>
+</Solution>

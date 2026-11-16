@@ -9,7 +9,7 @@ A change is done when:
 
 ## 1. Build and tests
 
-The commands are listed in `agents/AGENTS.md` (Build, run, test) once step 0.1 has created the solution. Run the full test suite, not just new tests, and run `dotnet format --verify-no-changes`.
+The commands are listed in `agents/AGENTS.md` (Build, run, test). Run the full test suite, not just new tests, and run `dotnet format --verify-no-changes`.
 
 ## 2. Cities: Skylines side (needs the user)
 

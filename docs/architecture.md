@@ -109,3 +109,7 @@ The inputs depend on reverse-engineered game internals and on whatever mods and 
 | D6 | 2026-11-16 | Textures as PNG with `.color`/`.normal`/`.data` suffixes | BeamNG cooks them into compressed DDS itself. |
 | D7 | 2026-11-16 | Clean and full output modes | Shareable output must contain no third-party content. |
 | D8 | 2026-11-16 | Deterministic output | Meaningful diffs and golden tests. |
+| D9 | 2026-11-16 | Name `CsToBeamNG` (CLI `cstobeamng`), MIT license, CI on GitHub Actions (Ubuntu and Windows) | The maintainer's choices at project setup. The name avoids "CS2" and "Skylines2", which suggest Cities: Skylines II. CI is the only regular Windows check. |
+| D10 | 2026-11-16 | System.CommandLine 2.0.x for the CLI | Microsoft's command-line parser (MIT). The 2.0 line is the one serviced alongside .NET 10 LTS. |
+| D11 | 2026-11-16 | xUnit.net v3 on Microsoft Testing Platform; `global.json` puts `dotnet test` in MTP mode | xUnit 4 defaults to MTP v2, which the .NET 10 SDK no longer runs through VSTest mode. It also needs fewer packages. |
+| D12 | 2026-11-16 | net35 builds keep nullable analysis, with internal polyfills of the flow-analysis attributes (`src/Shared/`) | Disabling nullable for net35 would leave the exporter, which is net35 only, unchecked. |

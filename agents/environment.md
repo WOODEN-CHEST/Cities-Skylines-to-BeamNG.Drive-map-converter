@@ -4,7 +4,7 @@ Default locations on both supported OSes. Code must find these through the locat
 
 ## Tools
 
-- .NET SDK 10, pinned in `global.json` after step 0.1. It also builds the net35 exporter, using reference-assembly packages and the game's own DLLs.
+- .NET SDK 10. `global.json` pins the 10.0.400 feature band and rolls forward to newer 10.0 feature bands. The same SDK builds the net35 exporter, using reference-assembly packages and the game's own DLLs.
 - Optional: Python 3 for throwaway analysis scripts. Keep them out of the product.
 
 ## Steam
@@ -26,10 +26,24 @@ App ids: Cities: Skylines **255710**, BeamNG.drive **284160**.
 | User data | `%LOCALAPPDATA%\Colossal Order\Cities_Skylines` | `$XDG_DATA_HOME/Colossal Order/Cities_Skylines` (default `~/.local/share/...`) |
 | Local mods | `<user data>\Addons\Mods\<ModName>\` | same layout |
 | Saves | `<user data>\Saves\`, and Steam Cloud saves in `<steam root>\userdata\<account>\255710\remote\` | same layout |
-| Game log | `Cities_Data\output_log.txt` (verify) | `~/.config/unity3d/Colossal Order/Cities: Skylines/Player.log` |
+| Game log | `Cities_Data\output_log.txt` (verify) | `~/.config/unity3d/Colossal Order/Cities_ Skylines/Player.log` (underscore and space, not a colon) |
 | Workshop items | `<library>\steamapps\workshop\content\255710\<item id>\` | same layout |
 
 Inside the game, mods should use `ColossalFramework.IO.DataLocation` (`localApplicationData`, `addonsPath`, `modsPath`, `saveLocation`) instead of these tables. The exporter writes dumps to `<user data>/CsToBeamNG/dumps/<city>_<timestamp>/`; step 0.4 confirms this.
+
+### Build-time locations (MSBuild properties)
+
+The build finds the game through these properties, defined in `Directory.Build.props`. Overrides: see "Build, run, test" in `agents/AGENTS.md`.
+
+| Property | Default on Windows | Default on Linux |
+|---|---|---|
+| `CitiesSkylinesDir` | `C:\Program Files (x86)\Steam\steamapps\common\Cities_Skylines` | `$HOME/.steam/steam/steamapps/common/Cities_Skylines` |
+| `CitiesSkylinesManagedDir` | `<CitiesSkylinesDir>/Cities_Data/Managed` | same |
+| `CitiesSkylinesUserDir` | `%LOCALAPPDATA%\Colossal Order\Cities_Skylines` | `$XDG_DATA_HOME` (default `$HOME/.local/share`) + `/Colossal Order/Cities_Skylines` |
+| `CitiesSkylinesModsDir` | `<CitiesSkylinesUserDir>/Addons/Mods` | same |
+| `DeployMod` | `true` when the mods folder exists | same |
+
+The defaults cover only the default Steam library. A game in another library needs an override; the converter's locator (step 0.2) searches all libraries.
 
 ## BeamNG.drive
 

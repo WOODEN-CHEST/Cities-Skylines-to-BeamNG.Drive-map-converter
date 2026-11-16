@@ -1,0 +1,68 @@
+<Project>
+  <!--
+    Shared build settings for every project; the rules behind them are in agents/conventions.md.
+    Settings that depend on a project's target framework live in Directory.Build.targets, because
+    single-target projects set TargetFramework after this file is imported.
+  -->
+
+  <!-- Optional machine-local overrides (gitignored). Start from Directory.Build.local.props.example. -->
+  <Import Project="$(MSBuildThisFileDirectory)Directory.Build.local.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.local.props')" />
+
+  <PropertyGroup Label="Language and analysis">
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <!-- Off, so the net35 and net10.0 builds compile identical source: every file states its usings. -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <MSBuildTreatWarningsAsErrors>true</MSBuildTreatWarningsAsErrors>
+    <!-- The SDK enables the .NET analyzers only for .NET 5+ targets by default; net35 code gets them too. -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <!-- Pinned rather than "latest", so an SDK update can't change the rule set. Raise it deliberately. -->
+    <AnalysisLevel>10.0-recommended</AnalysisLevel>
+    <!-- Runs the code-style (IDE) rules that .editorconfig sets to warning during builds. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!--
+      Needed for IDE0005 (unnecessary usings) at build time. Missing XML comments (CS1591) are
+      errors only in projects that set RequireXmlDocs; see Directory.Build.targets.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Output">
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <IsPackable>false</IsPackable>
+    <!-- Don't copy the localised resource assemblies that some packages ship. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Product">
+    <Product>CsToBeamNG</Product>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Authors>WOODEN-CHEST</Authors>
+    <Copyright>Copyright (c) 2026 WOODEN-CHEST</Copyright>
+  </PropertyGroup>
+
+  <!--
+    Cities: Skylines locations, used to build and deploy the exporter (see agents/environment.md).
+    Override them in this order of precedence: -p:Name=value, Directory.Build.local.props,
+    environment variables of the same name. The defaults below apply only to unset properties.
+  -->
+  <PropertyGroup Label="Cities: Skylines defaults (Windows)" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <CitiesSkylinesDir Condition="'$(CitiesSkylinesDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Cities_Skylines</CitiesSkylinesDir>
+    <CitiesSkylinesUserDir Condition="'$(CitiesSkylinesUserDir)' == ''">$(LOCALAPPDATA)\Colossal Order\Cities_Skylines</CitiesSkylinesUserDir>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Cities: Skylines defaults (Linux)" Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <!-- ~/.steam/steam links to the Steam root on native installs. Other libraries need an override. -->
+    <CitiesSkylinesDir Condition="'$(CitiesSkylinesDir)' == ''">$(HOME)/.steam/steam/steamapps/common/Cities_Skylines</CitiesSkylinesDir>
+    <CitiesSkylinesUserDir Condition="'$(CitiesSkylinesUserDir)' == '' and '$(XDG_DATA_HOME)' != ''">$(XDG_DATA_HOME)/Colossal Order/Cities_Skylines</CitiesSkylinesUserDir>
+    <CitiesSkylinesUserDir Condition="'$(CitiesSkylinesUserDir)' == ''">$(HOME)/.local/share/Colossal Order/Cities_Skylines</CitiesSkylinesUserDir>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Cities: Skylines derived locations">
+    <CitiesSkylinesManagedDir Condition="'$(CitiesSkylinesManagedDir)' == ''">$([System.IO.Path]::Combine('$(CitiesSkylinesDir)', 'Cities_Data', 'Managed'))</CitiesSkylinesManagedDir>
+    <CitiesSkylinesModsDir Condition="'$(CitiesSkylinesModsDir)' == ''">$([System.IO.Path]::Combine('$(CitiesSkylinesUserDir)', 'Addons', 'Mods'))</CitiesSkylinesModsDir>
+  </PropertyGroup>
+</Project>

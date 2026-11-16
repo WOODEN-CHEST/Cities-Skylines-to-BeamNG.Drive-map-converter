@@ -15,14 +15,16 @@ The goal is a codebase one maintainer can keep developing for years, even though
 
 ## C# style
 
-- Follow `.editorconfig`; `dotnet format --verify-no-changes` must pass.
-- Use file-scoped namespaces, and make the namespace match the folder path.
-- Nullable reference types are enabled, warnings are errors, and .NET analyzers run at the recommended level. Never suppress a warning without a comment explaining why.
+- Follow `.editorconfig`; `dotnet format --verify-no-changes` must pass. The code-style rules it sets to `warning` fail the build, and `dotnet format` fixes most of them.
+- Use file-scoped namespaces, and make the namespace match the folder path. Usings go at the top of the file.
+- Nullable reference types are enabled, warnings are errors, and .NET analyzers run at the recommended level (`AnalysisLevel` 10.0, pinned in `Directory.Build.props`). Never suppress a warning without a comment explaining why.
+- Always use braces, and always state accessibility.
+- `var`: spell out built-in types (`int`, `float`, `double`, `string`, ...) so that float/double mix-ups stay visible; elsewhere `var` is fine.
 - Keep types small and focused. Prefer immutable data (records, readonly structs) for model types. No static mutable state outside clearly marked caches.
 - Naming:
-  - PascalCase for types and members, `_camelCase` for private fields, no Hungarian prefixes.
+  - PascalCase for types, members and constants (private ones too); `_camelCase` for all other private fields, static or not; camelCase for locals and parameters. No Hungarian prefixes.
   - Put units in names where they would otherwise be ambiguous: `heightMeters`, `angleRadians`, `sizeCells`.
-- Comments explain *why*, not *what*. Public types and members of `Dump` and `Converter` get XML doc comments.
+- Comments explain *why*, not *what*. Public types and members of `Dump` and `Converter` get XML doc comments; the build enforces this in those projects (`RequireXmlDocs` makes CS1591 an error).
 - No magic numbers for format or game constants. Name them (`TerrainResolution = 1081`) and point to `docs/research/` for the source.
 
 ## .NET 3.5 and Unity 5.6 constraints (Exporter, and the net35 build of Dump)
@@ -33,7 +35,9 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
   - `Task`/`async`, `ValueTuple`/`Tuple`, `Span<T>`, `Lazy<T>`
   - `string.IsNullOrWhiteSpace`, `Enum.HasFlag`, `Stream.CopyTo`, `StringBuilder.Clear`
   - `Path.Combine` with more than two arguments
-- **Avoid language features that need runtime or library support:** default interface members, `ref struct`, records and `init` (unless polyfilled), nullable attributes (polyfill them or disable nullable for net35).
+- **Avoid language features that need runtime or library support:** default interface members, `ref struct`, records and `init` (they would need an `IsExternalInit` polyfill; check in the game before relying on them).
+- **Nullable analysis is on for net35 too.** The compiler generates the attributes it needs. The flow-analysis attributes (`NotNullWhen`, `MemberNotNull`, ...) come from internal polyfills in `src/Shared/NullableAttributes.cs`, which every net35 project compiles in. Never expose them to another net35 assembly through `InternalsVisibleTo`: the copies would conflict (CS0436).
+- **Code compiled for both targets (Dump):** the analyzers also check the net10.0 build, where they suggest APIs that net35 lacks; for example, CA1510 asks for `ArgumentNullException.ThrowIfNull`. Use `#if NET` for such calls, or a small helper in Dump; don't disable the rule.
 - **Threads:** call Unity APIs only on the main thread. Read simulation data consistently: on the simulation thread (`SimulationManager.AddAction`), or justify any other approach in a comment.
 - **Never modify game state.** The exporter only reads. Don't pause the simulation, change settings, or write into managers.
 - **One bad object must not abort an export.** Catch per object, log its id and prefab name, count the failures, and report them in the manifest.
@@ -66,12 +70,13 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
 
 - Fail fast on unreadable or incompatible input, with a message that names the file, the version found and the version expected.
 - Degrade gracefully on individual objects: skip the object, log a warning with its identity, count it, and include the counts in the conversion report.
-- **Converter:** log through `Microsoft.Extensions.Logging` abstractions (or the logger chosen in step 0.1). The CLI prints a concise summary and writes a detailed log next to the output.
+- **Converter:** log through the `Microsoft.Extensions.Logging` abstractions; the first step that logs adds the package. The CLI prints a concise summary and writes a detailed log next to the output.
 - **Exporter:** write `export.log` in the dump folder, plus `[CsToBeamNG]`-prefixed lines in the game log.
 
 ## Tests
 
-- xUnit covers `Dump` (its net10.0 build) and `Converter`. Tests must pass on Linux and Windows.
+- xUnit.net v3 (on Microsoft Testing Platform) covers `Dump` (its net10.0 build) and `Converter`. Tests must pass on Linux and Windows.
+- Test methods are named as PascalCase sentences, such as `RejectsWrongMagic`; underscores are not allowed (CA1707).
 - Kinds of test:
   - unit tests for math (Béziers, transforms, resampling);
   - golden-file tests for writers;

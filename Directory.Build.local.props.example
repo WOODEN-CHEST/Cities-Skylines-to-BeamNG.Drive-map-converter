@@ -1,0 +1,23 @@
+<Project>
+  <!--
+    Machine-local build settings. Copy this file to Directory.Build.local.props (gitignored) and
+    keep only the lines you need. Values here override environment variables of the same name;
+    -p:Name=value on the command line overrides both.
+  -->
+  <PropertyGroup>
+    <!-- Cities: Skylines install folder (the one containing Cities_Data). -->
+    <!-- <CitiesSkylinesDir>D:\SteamLibrary\steamapps\common\Cities_Skylines</CitiesSkylinesDir> -->
+
+    <!-- Folder with the game's managed assemblies. Defaults to $(CitiesSkylinesDir)/Cities_Data/Managed. -->
+    <!-- <CitiesSkylinesManagedDir>/path/to/Cities_Skylines/Cities_Data/Managed</CitiesSkylinesManagedDir> -->
+
+    <!-- Cities: Skylines user data folder (contains Addons, Saves, ...). -->
+    <!-- <CitiesSkylinesUserDir>/path/to/Colossal Order/Cities_Skylines</CitiesSkylinesUserDir> -->
+
+    <!-- Folder that receives the mod. Defaults to $(CitiesSkylinesUserDir)/Addons/Mods. -->
+    <!-- <CitiesSkylinesModsDir>/path/to/Colossal Order/Cities_Skylines/Addons/Mods</CitiesSkylinesModsDir> -->
+
+    <!-- Copy the built mod into the mods folder after each build. Defaults to true when that folder exists. -->
+    <!-- <DeployMod>false</DeployMod> -->
+  </PropertyGroup>
+</Project>

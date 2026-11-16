@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net35 for the exporter, which runs inside Cities: Skylines; net10.0 for the converter. -->
+    <TargetFrameworks>net35;net10.0</TargetFrameworks>
+    <RequireXmlDocs>true</RequireXmlDocs>
+  </PropertyGroup>
+
+</Project>

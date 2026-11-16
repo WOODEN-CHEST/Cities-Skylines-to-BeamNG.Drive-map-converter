@@ -57,11 +57,14 @@ Prop positions are stored quantised: x and z as short × 0.263671875 m, y as u16
 
 - **Game build:** Unity 5.6.7f1. The managed assemblies are in `Cities_Data/Managed/` (Assembly-CSharp, ColossalManaged, ICities, UnityEngine and others), and there is a native Linux build (`Cities.x64`). [verified 2026-11-16]
 - **Mods** are .NET Framework 3.5 class libraries in `<user data>/Addons/Mods/<Name>/`; the game also compiles `Source/*.cs` at startup. [community: [Modding API](https://skylines.paradoxwikis.com/Modding_API)]
+  - Our mod built with the .NET 10 SDK (C# 14, net35 reference assemblies from NuGet, compiler-generated nullable attributes) loads without errors and is listed in Content Manager → Mods. [verified 2026-11-16, native Linux, Steam build 22724702]
+  - The game loads every DLL in a mod folder. The log shows `Loading <path>` and then `Assembly <name>, Version=... loaded.`, both tagged `[Mods - Internal]`. A folder without `Source/` gets `No source files found: <folder>`. [verified 2026-11-16]
+  - Every mod assembly, built-in ones such as UnlockAll included, also produces `Non platform assembly: data-0x... (this message is harmless)` and `Fallback handler could not load library .../data-0x....so`. These lines are normal. [verified 2026-11-16]
 - **Mod entry points** come from ICities: `IUserMod` and `LoadingExtensionBase` [verified]. The settings UI comes from a public `OnSettingsUI(UIHelperBase)` method that the game finds by reflection, so it is not part of the interface. [community]
 - **Harmony patching**, if needed, goes through `CitiesHarmony.API` (NuGet, MIT): call `HarmonyHelper.DoOnHarmonyReady`, and keep Harmony types out of the `IUserMod` class. [community: [CitiesHarmony](https://github.com/boformer/CitiesHarmony)]
 - **Paths in-game:** `ColossalFramework.IO.DataLocation` has `localApplicationData`, `addonsPath`, `modsPath`, `saveLocation`, `gameContentPath` and `executableDirectory`. [verified: the property getters exist]
 - **Game log:**
-  - Linux: `~/.config/unity3d/Colossal Order/Cities: Skylines/Player.log` [community: [CSM developer resources](https://github.com/CitiesSkylinesMultiplayer/CSM/wiki/Developer-Resources)].
+  - Linux: `~/.config/unity3d/Colossal Order/Cities_ Skylines/Player.log`. The folder name has an underscore where the product name has a colon, because Unity replaces the `:`. [verified 2026-11-16 on the native Linux build: the log is there and starts with the game's Mono loading lines.] The previously recorded `.../Cities: Skylines/Player.log` (from [CSM developer resources](https://github.com/CitiesSkylinesMultiplayer/CSM/wiki/Developer-Resources)) does not exist.
   - Windows: `Cities_Data/output_log.txt` [inferred from Unity 5.x conventions; verify].
 - **Native Linux stability:** some reports say mods are less stable on the native Linux build than under Proton. These are anecdotal. [community: ProtonDB]
 

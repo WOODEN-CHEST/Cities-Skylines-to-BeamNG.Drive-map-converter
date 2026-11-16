@@ -33,23 +33,34 @@ Rationale, conversion stages and the decision log are in [docs/architecture.md](
 
 | Path | Contents | In git |
 |---|---|---|
-| `src/CsToBeamNG.Exporter/` | CS1 mod (net35) | planned (step 0.1) |
-| `src/CsToBeamNG.Dump/` | dump format: model, readers, writers (net35 + net10.0) | planned |
-| `src/CsToBeamNG.Converter/` | conversion library (net10.0) | planned |
-| `src/CsToBeamNG.Cli/` | command-line front end (net10.0) | planned |
-| `tests/` | xUnit test projects | planned |
+| `src/CsToBeamNG.Exporter/` | CS1 mod (net35) | yes |
+| `src/CsToBeamNG.Dump/` | dump format: model, readers, writers (net35 + net10.0) | yes |
+| `src/CsToBeamNG.Converter/` | conversion library (net10.0) | yes |
+| `src/CsToBeamNG.Cli/` | command-line front end (net10.0), executable `cstobeamng` | yes |
+| `src/Shared/` | source files compiled into several projects (net35 polyfills) | yes |
+| `tests/` | xUnit test projects | yes |
 | `docs/` | architecture, legal notes, research (reverse-engineering knowledge) | yes |
 | `agents/` | agent guidance: this file, conventions, verification, environment | yes |
 | `agents/local/` | current development plan, step files, progress, scratch | **no** (gitignored) |
 
-`CsToBeamNG` is a working name; step 0.1 confirms or changes it.
+Shared build settings are in `Directory.Build.props`/`.targets`, package versions in `Directory.Packages.props`, code style in `.editorconfig`, the SDK pin in `global.json` and CI in `.github/workflows/ci.yml`.
 
 ## Build, run, test
 
-Not set up yet. Step 0.1 creates the solution and replaces this section with the real commands. The plan is:
+From the repository root, on either OS:
 
-- `dotnet build` and `dotnet test` from the repository root, on both OSes.
-- The exporter builds only where the CS1 managed assemblies are found (see [agents/environment.md](environment.md)). Elsewhere it is skipped with a warning, so the rest builds without the game (CI, contributors).
+```sh
+dotnet build                                        # everything; deploys the mod when CS1 is found
+dotnet test                                         # all tests
+dotnet test --project tests/CsToBeamNG.Dump.Tests   # one test project
+dotnet format --verify-no-changes                   # style check; plain `dotnet format` fixes most issues
+dotnet run --project src/CsToBeamNG.Cli -- --help   # the CLI
+```
+
+- Warnings are errors, including code style (`.editorconfig`) and analyzers.
+- Tests use xUnit.net v3 on Microsoft Testing Platform. `global.json` switches `dotnet test` to MTP mode, so it takes `--project`/`--solution` instead of a bare path, and VSTest options such as `--logger` don't apply.
+- The exporter builds only where the CS1 assemblies are found, and then deploys itself to `<CS1 user data>/Addons/Mods/CsToBeamNG/` (our DLLs only). Elsewhere it is skipped with warning CSTB001 (a plain message on CI), and the rest still builds and tests.
+- Game paths come from the MSBuild properties listed in [agents/environment.md](environment.md). Override them with `-p:Name=value`, a gitignored `Directory.Build.local.props` (copy the `.example`), or environment variables, in that order of precedence. `-p:DeployMod=false` skips deployment.
 
 ## Working agreements
 
