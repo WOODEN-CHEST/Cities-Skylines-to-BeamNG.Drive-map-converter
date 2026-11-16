@@ -54,7 +54,7 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
   - Tests that write numbers must also run once under a decimal-comma culture.
 - **Text output:** UTF-8 without BOM, `\n` line endings.
 - **Windows-only APIs** (such as the registry) go behind `OperatingSystem.IsWindows()`, with a Linux equivalent provided.
-- **Game locations:** never assume them. Go through the locator (step 0.2), with user overrides.
+- **Game locations:** never assume them. Go through `GameEnvironmentLocator` (`src/CsToBeamNG.Converter/Discovery/`), which applies the user's overrides. New knowledge about where games keep files goes in [docs/research/game-locations.md](../docs/research/game-locations.md).
 
 ## Data, coordinates and determinism
 

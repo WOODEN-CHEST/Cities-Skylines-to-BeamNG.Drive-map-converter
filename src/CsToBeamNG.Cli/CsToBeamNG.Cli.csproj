@@ -15,4 +15,8 @@
     <ProjectReference Include="../CsToBeamNG.Converter/CsToBeamNG.Converter.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CsToBeamNG.Cli.Tests" />
+  </ItemGroup>
+
 </Project>

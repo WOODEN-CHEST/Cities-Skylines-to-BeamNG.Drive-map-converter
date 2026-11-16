@@ -9,6 +9,7 @@ What we know about the two games' internals and file formats, collected while bu
 | [cs1-assets.md](cs1-assets.md) | Prefabs, meshes, texture channel packing, colour variation, placement randomness |
 | [beamng-level-format.md](beamng-level-format.md) | Level structure, terrain file, objects, meshes, materials, forest, limits |
 | [beamng-ai-and-traffic.md](beamng-ai-and-traffic.md) | AI navgraph from decal roads, traffic signals, parking, the MCP server |
+| [game-locations.md](game-locations.md) | Where Steam, Cities: Skylines and BeamNG.drive keep their files: libraries, manifests, user folders, saves, logs, versions |
 | [prior-art.md](prior-art.md) | Related tools and what they teach us |
 
 ## Rules

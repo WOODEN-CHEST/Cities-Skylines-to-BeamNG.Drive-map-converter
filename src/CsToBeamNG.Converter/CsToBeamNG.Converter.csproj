@@ -9,4 +9,8 @@
     <ProjectReference Include="../CsToBeamNG.Dump/CsToBeamNG.Dump.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CsToBeamNG.Converter.Tests" />
+  </ItemGroup>
+
 </Project>

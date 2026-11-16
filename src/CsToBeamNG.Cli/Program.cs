@@ -9,6 +9,7 @@ internal static class Program
     {
         // The root command provides --help and --version (the informational version) by itself.
         RootCommand rootCommand = new("Converts a Cities: Skylines city into a drivable BeamNG.drive level.");
+        rootCommand.Subcommands.Add(DoctorCommand.Create());
 
         // Without arguments, show the help instead of silently doing nothing.
         string[] effectiveArgs = args.Length == 0 ? ["--help"] : args;

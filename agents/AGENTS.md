@@ -55,6 +55,7 @@ dotnet test                                         # all tests
 dotnet test --project tests/CsToBeamNG.Dump.Tests   # one test project
 dotnet format --verify-no-changes                   # style check; plain `dotnet format` fixes most issues
 dotnet run --project src/CsToBeamNG.Cli -- --help   # the CLI
+dotnet run --project src/CsToBeamNG.Cli -- doctor   # where the games and their folders are on this machine
 ```
 
 - Warnings are errors, including code style (`.editorconfig`) and analyzers.
