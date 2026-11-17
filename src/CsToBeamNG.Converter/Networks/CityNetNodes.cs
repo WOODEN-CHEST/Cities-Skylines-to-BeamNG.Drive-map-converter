@@ -33,7 +33,7 @@ public sealed class CityNetNodes : ISectionData
         }
 
         Nodes = nodes;
-        (AreaOfInterestBounds, ContentNodes) = Bounds(nodes, unlockedTiles);
+        (AreaOfInterestBounds, ContentNodes) = ContentBounds.WithinTiles(nodes, node => node.Position, unlockedTiles);
     }
 
     /// <summary>The nodes, ordered by id.</summary>
@@ -60,38 +60,6 @@ public sealed class CityNetNodes : ISectionData
     /// <param name="id">The node's id.</param>
     /// <param name="node">The node, if the dump has it.</param>
     public bool TryGet(uint id, [NotNullWhen(true)] out NetNodeRecord? node) => _byId.TryGetValue(id, out node);
-
-    private static (MapRect? Bounds, int Count) Bounds(IReadOnlyList<NetNodeRecord> nodes, IReadOnlyList<TileCoordinate> unlockedTiles)
-    {
-        var tiles = new List<MapRect>(unlockedTiles.Count);
-        foreach (TileCoordinate tile in unlockedTiles)
-        {
-            tiles.Add(MapGeometry.TileBounds(tile));
-        }
-
-        float minX = float.PositiveInfinity;
-        float minZ = float.PositiveInfinity;
-        float maxX = float.NegativeInfinity;
-        float maxZ = float.NegativeInfinity;
-        int count = 0;
-        foreach (NetNodeRecord node in nodes)
-        {
-            float x = node.Position.X;
-            float z = node.Position.Z;
-            if (tiles.Count > 0 && !tiles.Exists(tile => x >= tile.MinX && x <= tile.MaxX && z >= tile.MinZ && z <= tile.MaxZ))
-            {
-                continue;
-            }
-
-            minX = Math.Min(minX, x);
-            minZ = Math.Min(minZ, z);
-            maxX = Math.Max(maxX, x);
-            maxZ = Math.Max(maxZ, z);
-            count++;
-        }
-
-        return count == 0 ? (null, 0) : (new MapRect(minX, minZ, maxX, maxZ), count);
-    }
 
     private SectionStatistic[] BuildStatistics()
     {

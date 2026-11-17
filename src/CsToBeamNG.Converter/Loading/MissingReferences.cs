@@ -1,7 +1,6 @@
 using System.Globalization;
-using CsToBeamNG.Converter.Loading;
 
-namespace CsToBeamNG.Converter.Networks;
+namespace CsToBeamNG.Converter.Loading;
 
 /// <summary>
 /// Counts objects that refer to something the dump lacks, such as segments whose node is missing, and reports them in

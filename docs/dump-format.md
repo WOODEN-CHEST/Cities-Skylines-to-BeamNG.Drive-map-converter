@@ -201,7 +201,7 @@ The exporter counts the entries in the game's instance buffers whose `Created` f
 
 Readers accept keys they don't know, and missing keys, which mean the count is unknown.
 
-`failureCounts` uses the same keys, plus `netPrefabs` for network prefabs the exporter couldn't describe (prefabs aren't objects in the city, so `counts` has no such key).
+`failureCounts` uses the same keys, plus `netPrefabs`, `buildingPrefabs`, `propPrefabs` and `treePrefabs` for prefabs the exporter couldn't describe (prefabs aren't objects in the city, so `counts` has no such keys).
 
 ### `sections`
 
@@ -319,8 +319,12 @@ The writer computes the text of floating-point numbers itself, with exact intege
 | [`net-nodes`](#net-nodes-01) | 0.1 | Network nodes: position, flags, elevation, segments, building, prefab | step 1.3 |
 | [`net-segments`](#net-segments-01) | 0.1 | Network segments: nodes, directions, flags, prefab, the centre curve and the corners the game computes | step 1.3 |
 | [`net-lanes`](#net-lanes-01) | 0.1 | The segments' lanes: curve, length, flags, index in the prefab | step 1.3 |
-
-Step 1.4 adds buildings, props and trees.
+| [`building-prefabs`](#building-prefabs-01) | 0.1 | The building prefabs that buildings use: class, AI, cells, size, mesh bounds, placement, terrain flags, colours, sub-buildings | step 1.4 |
+| [`buildings`](#buildings-01) | 0.1 | Buildings, sub-buildings included: position, angle, mesh position, lot, flags, parent, level, colour | step 1.4 |
+| [`prop-prefabs`](#prop-prefabs-01) | 0.1 | The prop prefabs that props use: class, mesh bounds, scale range, decal, marker, water and light flags, colours | step 1.4 |
+| [`props`](#props-01) | 0.1 | Props placed on their own: position, angle, scale, colour, flags | step 1.4 |
+| [`tree-prefabs`](#tree-prefabs-01) | 0.1 | The tree prefabs that trees use: class, mesh bounds, scale and brightness ranges, default colour | step 1.4 |
+| [`trees`](#trees-01) | 0.1 | Trees: position, scale, brightness, flags | step 1.4 |
 
 To add a section:
 
@@ -352,7 +356,15 @@ Point (i, j) lies at X = `originX` + `spacing` · i and Z = `originZ` + `spacing
 
 ### Vectors and curves
 
-Record layouts store a position or direction as three consecutive `f32` fields, X, Y and Z (called `x`, `y`, `z` with a prefix below), in the game's coordinates ([Data](#data)). A cubic Bézier curve is twelve consecutive `f32` fields: its control points a, b, c and d, each as X, Y, Z. The curve starts at a, ends at d and is pulled towards b and c, as the game's `ColossalFramework.Math.Bezier3` holds it. In the Dump library these are `DumpVector3` and `DumpBezier3`.
+Record layouts store a position or direction as three consecutive `f32` fields, X, Y and Z (called `x`, `y`, `z` with a prefix below), in the game's coordinates ([Data](#data)). A cubic Bézier curve is twelve consecutive `f32` fields: its control points a, b, c and d, each as X, Y, Z. The curve starts at a, ends at d and is pulled towards b and c, as the game's `ColossalFramework.Math.Bezier3` holds it. A colour is four consecutive `f32` fields, R, G, B and A: the game's Unity `Color`, unchanged, with components usually from 0 to 1.
+
+JSON files write a vector as an object with the numbers `x`, `y` and `z`, a colour as an object with `r`, `g`, `b` and `a` (all 32-bit), and an axis-aligned box, such as a mesh's extent in a prefab's own coordinates, as an object with the vectors `min` and `max`, its smallest and largest corner:
+
+```json
+{ "min": { "x": -8, "y": 0, "z": -8 }, "max": { "x": 8, "y": 9.5, "z": 8 } }
+```
+
+In the Dump library these are `DumpVector3`, `DumpBezier3`, `DumpColor` and `DumpBounds`.
 
 ### `terrain` (0.1)
 
@@ -615,6 +627,245 @@ Record type `netLane`, 64 bytes:
 
 Readers skip, with a warning, nodes, segments and lanes that have a value that isn't finite, or an id that was listed already; they keep objects whose references the other sections lack and report them.
 
+### Buildings, props and trees
+
+Six sections describe the objects placed in the city and on the map: buildings, sub-buildings included, props placed on their own, and trees, each with a section of the prefabs they use. The exporter writes them since step 1.4 ([research: CS1 assets](research/cs1-assets.md#placement)). Objects refer to their prefab by its index in the game's prefab collection (`m_infoIndex`), and sub-buildings to their main building by its id; ids are the objects' indices in the game's buffers, so 0 is never an object and means "none". All six come from one simulation-thread action. What the game derives for an object — where it draws a building's mesh, the colours, the props' and trees' scales and the trees' brightness — comes from the game's own methods and randomizer, computed as its renderer computes it. Objects and prefabs the exporter couldn't read are missing and counted in `failureCounts`.
+
+The prefab sections are JSON files, so later versions can add what Phase 2 needs, such as references to mesh and material files inside the `mesh` and `lodMesh` objects, as optional properties in a minor version, which readers of 0.1 ignore ([Versioning](#versioning)). Building props and sub-meshes aren't part of version 0.1.
+
+Readers skip, with a warning, objects that have a value that isn't finite, or an id that was listed already; they keep objects whose prefab or main building the dump lacks, and report them.
+
+#### `building-prefabs` (0.1)
+
+The building prefabs (`BuildingInfo`) that buildings use.
+
+| File | Content |
+|---|---|
+| `prefabs.json` | the prefabs, ordered by index |
+
+`recordCount`: the number of prefabs.
+
+```json
+{
+  "prefabs": [
+    {
+      "index": 312,
+      "name": "L1 2x2 Detached01",
+      "class": { "name": "Low Residential - Level1", "service": "Residential", "subService": "ResidentialLow", "level": "Level1", "layer": 1 },
+      "ai": { "type": "ResidentialBuildingAI" },
+      "cellWidth": 2,
+      "cellLength": 3,
+      "size": { "x": 16, "y": 9.5, "z": 24 },
+      "mesh": { "min": { "x": -8, "y": -0.5, "z": -12 }, "max": { "x": 8, "y": 9.5, "z": 12 } },
+      "lodMesh": { "min": { "x": -7.75, "y": 0, "z": -11.5 }, "max": { "x": 7.75, "y": 9.25, "z": 11.5 } },
+      "placementMode": "Roadside",
+      "zoningMode": "Straight",
+      "circular": false,
+      "expandFrontYard": true,
+      "terrain": { "flattenTerrain": true, "flattenFullArea": false, "fullPavement": false, "fullGravel": true, "clipTerrain": false },
+      "requireHeightMap": false,
+      "useColorVariations": true,
+      "colors": [ { "r": 1, "g": 0.5, "b": 0.25, "a": 0 }, { "r": 0.5, "g": 0.5, "b": 0.25, "a": 0 }, { "r": 0.25, "g": 0.5, "b": 0.25, "a": 0 }, { "r": 0.125, "g": 0.5, "b": 0.25, "a": 0 } ],
+      "subBuildings": [
+        { "prefab": 313, "name": "Sub", "position": { "x": 4, "y": 0, "z": -8 }, "angle": 90, "fixedHeight": true }
+      ]
+    }
+  ]
+}
+```
+
+All properties are required, except `mesh`, `lodMesh` and a sub-building's `prefab`.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `index` | integer | The prefab's index in the game's prefab collection (`m_infoIndex` of buildings), unique in the file. |
+| `name` | string | The prefab's name. Workshop prefabs have names such as `123456789.My Building_Data`. |
+| `class` | object | The prefab's item class (`m_class`): `name`; `service`, `subService` and `level` as the game names them (`ItemClass.Service`, `SubService`, `Level`), such as `Residential`, `ResidentialLow`, `Level1`, empty strings if the prefab has no class; `layer`, the raw value of `ItemClass.Layer`, whose bit 0x1 is the default layer that the game shows in its normal view (0x2 water pipes, 0x10 and 0x20 the routes of aircraft and ships, 0x40 markers). Readers keep names they don't know. |
+| `ai.type` | string | The full type name of the prefab's AI (`m_buildingAI`), such as `ResidentialBuildingAI`; empty if it has none. |
+| `cellWidth`, `cellLength` | integer | The prefab's size in cells of 8 m (`m_cellWidth`, `m_cellLength`), 0 to 255. |
+| `size` | vector (32-bit) | The building's size as the game uses it for drawing and collisions (`m_size`), in metres: on X and Z twice the larger extent of its meshes to either side of its origin; on Y their height, raised to at least the prefab's `m_maxHeightOffset` (4 to 16 m). |
+| `mesh` | box | The extent of the main mesh in the prefab's own coordinates, which the game computed from its vertices (`m_generatedInfo.m_min` and `m_max`); absent if the prefab has no generated info. The game leaves both at ±100,000 if it found no vertices; readers treat a box whose minimum exceeds its maximum as empty. The mesh's own Unity bounds aren't used: the renderer lowers them to the base heights of the buildings it draws ([research](research/cs1-assets.md#prefabs)). |
+| `lodMesh` | box | The bounds of the level-of-detail mesh (`m_lodMesh.bounds`); absent if the prefab has none. |
+| `placementMode` | string | Where the building may be placed, as the game names it (`BuildingInfo.PlacementMode`): `Roadside`, `Shoreline`, `OnWater`, `OnGround`, `OnSurface`, `OnTerrain`, `ShorelineOrGround`, `PathsideOrGround`, `Concourse`, `PitLane`. |
+| `zoningMode` | string | How the building takes up zoned cells, as the game names it (`BuildingInfo.ZoningMode`): `Straight`, `CornerLeft`, `CornerRight`, `NotZoning`. |
+| `circular` | boolean | Whether the building is round (`m_circular`). |
+| `expandFrontYard` | boolean | Whether a lot deeper than `cellLength` grows in front of the building (`m_expandFrontYard`); otherwise it grows behind it. See `meshX` in [`buildings`](#buildings-01). |
+| `terrain.*` | boolean | How the building shapes and paints the terrain: `m_flattenTerrain`, `m_flattenFullArea`, `m_fullPavement`, `m_fullGravel`, `m_clipTerrain`. |
+| `requireHeightMap` | boolean | Whether the game drapes the main mesh over the terrain (`m_requireHeightMap`). |
+| `useColorVariations` | boolean | Whether the game picks one of `colors` for each building (`m_useColorVariations`); otherwise buildings get the first. |
+| `colors` | array of 4 colours | The prefab's colour variations, `m_color0` to `m_color3`. |
+| `subBuildings` | array of objects | The buildings the game creates with this one (`m_subBuildings`), in the prefab's order: `prefab`, the sub-building prefab's index, absent if it isn't loaded; `name`, its name, empty if it isn't loaded; `position`, its position relative to this building, in metres (vector); `angle`, its angle relative to this building, **in degrees**, as the game stores it; `fixedHeight`, whether it keeps its height relative to this building. |
+
+Prefabs the game hasn't loaded (a missing asset) aren't listed; buildings may then refer to an index the file lacks, which readers report.
+
+#### `buildings` (0.1)
+
+Every building, sub-buildings included (`Building`), with the values the game derives for drawing it.
+
+| File | Content |
+|---|---|
+| `buildings.bin` | records of type `building`, ordered by id |
+
+`recordCount`: the number of buildings, which equals `counts.buildings` less `failureCounts.buildings`.
+
+A building stands on a lot of `width` × `length` cells of 8 m, centred on its position. The game turns it by `angle` about the downward axis (`Quaternion.AngleAxis(angle, Vector3.down)`), so its local +X axis lies towards (cos `angle`, 0, sin `angle`) and its local +Z axis, where its front faces the road, towards (−sin `angle`, 0, cos `angle`) ([research: Placement](research/cs1-assets.md#placement)). The game draws a building only if it is created and neither deleted nor hidden (`flags` & 0x8000003 = 0x1), and its normal view shows only buildings whose prefab's class is on the default layer (see [`building-prefabs`](#building-prefabs-01)).
+
+Record type `building`, 72 bytes:
+
+| Offset | Type | Field | Unit | Meaning |
+|---|---|---|---|---|
+| 0 | u32 | `id` | | The building's id. |
+| 4 | u32 | `flags` | | `Building.m_flags`, raw. Bits used: 0x1 created, 0x2 deleted, 0x4 original (placed with the map editor, such as a rock formation), 0x10 untouchable (such as a sub-building), 0x10000 completed, 0x40000 abandoned, 0x400000 collapsed or burned down, 0x8000000 hidden. |
+| 8 | u32 | `flags2` | | `Building.m_flags2`, raw. |
+| 12 | u32 | `prefab` | | The index of the building's prefab in `building-prefabs`. |
+| 16 | f32 × 3 | `x`, `y`, `z` | m | The centre of the lot (`m_position`). |
+| 28 | f32 | `angle` | rad | The building's angle (`m_angle`). |
+| 32 | f32 × 3 | `meshX`, `meshY`, `meshZ` | m | Where the game draws the building's mesh: `Building.CalculateMeshPosition()`. A lot deeper than the prefab's cells moves the mesh by (`length` − `cellLength`) × 4 m along the building's local −Z axis (away from the front) if `expandFrontYard`, else along +Z; otherwise it equals the position. |
+| 44 | u32 | `parentBuilding` | | The id of the building this one belongs to as a sub-building (`m_parentBuilding`); 0 for none. |
+| 48 | u32 | `subBuilding` | | The id of the building's first sub-building, or, for a sub-building, of its main building's next one (`m_subBuilding`); 0 for none. |
+| 52 | f32 × 4 | `colorR`, `G`, `B`, `A` | | The colour the game draws the building with in its normal view: what the building's AI returns from `GetColor` for no info mode, which the game writes into its building colour map. Usually the prefab's colour variation picked by `Randomizer(id).Int32(4)`; events, hotels, pit stops and race buildings have colours of their own. The game sets alpha to 1 for buildings that have electricity and to 0 otherwise. |
+| 68 | u8 | `width` | cells | The lot's width across its front (`m_width`). |
+| 69 | u8 | `length` | cells | The lot's length from its front to its back (`m_length`). |
+| 70 | u8 | `level` | | `m_level`, as the game stores it. |
+| 71 | u8 | `baseHeight` | m | How far the game extends the building's base down on a slope (`m_baseHeight`). |
+
+#### `prop-prefabs` (0.1)
+
+The prop prefabs (`PropInfo`) that props use.
+
+| File | Content |
+|---|---|
+| `prefabs.json` | the prefabs, ordered by index |
+
+`recordCount`: the number of prefabs.
+
+```json
+{
+  "prefabs": [
+    {
+      "index": 77,
+      "name": "Bench 01",
+      "class": { "name": "Beautification Item", "service": "Beautification", "subService": "None", "level": "Level1", "layer": 1 },
+      "mesh": { "min": { "x": -0.95, "y": 0, "z": -0.34 }, "max": { "x": 0.95, "y": 0.96, "z": 0.34 } },
+      "lodMesh": { "min": { "x": -0.9, "y": 0, "z": -0.34 }, "max": { "x": 0.9, "y": 0.9, "z": 0.34 } },
+      "minScale": 1,
+      "maxScale": 1,
+      "decal": false,
+      "marker": false,
+      "requireHeightMap": false,
+      "requireWaterMap": false,
+      "createRuining": false,
+      "lightEffects": false,
+      "useColorVariations": false,
+      "colors": [ { "r": 1, "g": 1, "b": 1, "a": 1 }, { "r": 1, "g": 1, "b": 1, "a": 1 }, { "r": 1, "g": 1, "b": 1, "a": 1 }, { "r": 1, "g": 1, "b": 1, "a": 1 } ]
+    }
+  ]
+}
+```
+
+All properties are required, except `mesh` and `lodMesh`. `index`, `name` and `class` are as in [`building-prefabs`](#building-prefabs-01).
+
+| Field | Type | Meaning |
+|---|---|---|
+| `mesh`, `lodMesh` | box | The bounds of the main and the level-of-detail mesh (`m_mesh.bounds`, `m_lodMesh.bounds`) in the prefab's own coordinates; absent where the prefab has none. |
+| `minScale`, `maxScale` | number (32-bit) | The range of scales the game draws the prefab's props with (`m_minScale`, `m_maxScale`). |
+| `decal` | boolean | Whether the prop is a decal, which the game draws onto the terrain (`m_isDecal`). |
+| `marker` | boolean | Whether the prop is a marker, which the game shows only in the editors (`m_isMarker`). |
+| `requireHeightMap` | boolean | Whether the game drapes the mesh over the terrain (`m_requireHeightMap`). |
+| `requireWaterMap` | boolean | Whether the prop floats: the game draws it at the water's surface instead of at its height (`m_requireWaterMap`). |
+| `createRuining` | boolean | Whether the prop paints ruined ground onto the terrain (`m_createRuining`). |
+| `lightEffects` | boolean | Whether the prop's effects (`m_effects`) include a light, directly or inside a multi-effect, such as a street lamp's. |
+| `useColorVariations` | boolean | `m_useColorVariations`. The prop's colour comes from `colors` either way ([`props`](#props-01)). |
+| `colors` | array of 4 colours | The prefab's colours, `m_color0` to `m_color3`. |
+
+#### `props` (0.1)
+
+Every prop placed on its own (`PropInstance`). Props that belong to buildings and networks are placed from their prefabs and aren't in this section.
+
+| File | Content |
+|---|---|
+| `props.bin` | records of type `prop`, ordered by id |
+
+`recordCount`: the number of props, which equals `counts.props` less `failureCounts.props`.
+
+The game turns a prop like a building, by its angle about the downward axis, and scales it uniformly: its mesh is drawn with TRS(position, `AngleAxis(angle, Vector3.down)`, (`scale`, `scale`, `scale`)). It doesn't draw props that are hidden or blocked (`flags` & 0x44 ≠ 0).
+
+Record type `prop`, 48 bytes:
+
+| Offset | Type | Field | Unit | Meaning |
+|---|---|---|---|---|
+| 0 | u32 | `id` | | The prop's id. |
+| 4 | u32 | `prefab` | | The index of the prop's prefab in `prop-prefabs`. |
+| 8 | f32 × 3 | `x`, `y`, `z` | m | The prop's position from the game's accessor (`PropInstance.Position`). The game stores X and Z in steps of 0.263671875 m and Y in steps of 1/64 m; mods that store them more precisely replace the accessor. Floating props are drawn at the water's surface instead ([`prop-prefabs`](#prop-prefabs-01), `requireWaterMap`). |
+| 20 | f32 | `angle` | rad | The prop's angle from the game's accessor (`PropInstance.Angle`), in steps of 2π/65536. |
+| 24 | f32 | `scale` | | The prop's scale: `minScale` + `Randomizer(id).Int32(10000)` × (`maxScale` − `minScale`) × 0.0001, as `PropInstance.RenderInstance` computes it. |
+| 28 | f32 × 4 | `colorR`, `G`, `B`, `A` | | The prop's colour: the prefab's `GetColor` with the same randomizer after the scale, which picks one of the prefab's `colors` with `Int32(4)`. |
+| 44 | u16 | `flags` | | `PropInstance.m_flags`, raw. Bits used: 0x1 created, 0x2 deleted, 0x4 hidden, 0x20 fixed height (otherwise the game puts the prop back on the ground when the terrain changes), 0x40 blocked. |
+| 46 | pad 2 | | | |
+
+#### `tree-prefabs` (0.1)
+
+The tree prefabs (`TreeInfo`) that trees use.
+
+| File | Content |
+|---|---|
+| `prefabs.json` | the prefabs, ordered by index |
+
+`recordCount`: the number of prefabs.
+
+```json
+{
+  "prefabs": [
+    {
+      "index": 5,
+      "name": "Tree Oak",
+      "class": { "name": "Beautification Item", "service": "Beautification", "subService": "None", "level": "Level1", "layer": 1 },
+      "mesh": { "min": { "x": -3.5, "y": 0, "z": -3.25 }, "max": { "x": 3.5, "y": 12.75, "z": 3.25 } },
+      "minScale": 0.5,
+      "maxScale": 1.5,
+      "minBrightness": 0.75,
+      "maxBrightness": 1.25,
+      "defaultColor": { "r": 0.25, "g": 0.5, "b": 0.125, "a": 1 },
+      "createRuining": true
+    }
+  ]
+}
+```
+
+All properties are required, except `mesh`. `index`, `name` and `class` are as in [`building-prefabs`](#building-prefabs-01). Tree prefabs have no level-of-detail mesh of their own: the game draws far trees as billboards it generates at runtime.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `mesh` | box | The bounds of the mesh (`m_mesh.bounds`) in the prefab's own coordinates; absent if the prefab has none. |
+| `minScale`, `maxScale` | number (32-bit) | The range of scales the game draws the prefab's trees with (`m_minScale`, `m_maxScale`). |
+| `minBrightness`, `maxBrightness` | number (32-bit) | The range of their brightness (`m_minBrightness`, `m_maxBrightness`). |
+| `defaultColor` | colour | The colour that the game multiplies by a tree's brightness to tint it (`m_defaultColor`). |
+| `createRuining` | boolean | Whether the tree paints ruined ground onto the terrain (`m_createRuining`). |
+
+#### `trees` (0.1)
+
+Every tree of the city and the map (`TreeInstance`).
+
+| File | Content |
+|---|---|
+| `trees.bin` | records of type `tree`, ordered by id |
+
+`recordCount`: the number of trees, which equals `counts.trees` less `failureCounts.trees`.
+
+The game doesn't turn trees: it draws a tree's mesh with TRS(position, identity, (`scale`, `scale`, `scale`)), tinted with the prefab's `defaultColor` × `brightness`. It doesn't draw a tree whose grow state ((`flags` & 0xF00) >> 8) is 0, or that is hidden.
+
+Record type `tree`, 32 bytes:
+
+| Offset | Type | Field | Unit | Meaning |
+|---|---|---|---|---|
+| 0 | u32 | `id` | | The tree's id. |
+| 4 | u32 | `prefab` | | The index of the tree's prefab in `tree-prefabs`. |
+| 8 | f32 × 3 | `x`, `y`, `z` | m | The tree's position from the game's accessor (`TreeInstance.Position`), stored by the game like a prop's. |
+| 20 | f32 | `scale` | | The tree's scale: `minScale` + `Randomizer(id).Int32(10000)` × (`maxScale` − `minScale`) × 0.0001, as `TreeInstance.RenderInstance` computes it. |
+| 24 | f32 | `brightness` | | Its brightness: the same formula with `minBrightness` and `maxBrightness`, from the same randomizer after the scale. |
+| 28 | u16 | `flags` | | `TreeInstance.m_flags`, raw. Bits used: 0x1 created, 0x4 hidden, 0x20 fixed height (otherwise the game puts the tree back on the ground when the terrain changes), 0x40 fire damage, 0x80 burning, 0xF00 the grow state. |
+| 30 | pad 2 | | | |
+
 ### Template: `<name>` (0.1)
 
 What the section contains and where in the game it comes from, linking the research notes. Which step writes it.
@@ -652,7 +903,7 @@ It is UTF-8 text with one line per message: the UTC time to the millisecond, the
 | String tables | `StringTableBuilder`; `StringTable` (.NET 10) | `CsToBeamNG.Dump` |
 | JSON | `JsonWriter` | `CsToBeamNG.Dump.Json` |
 | Versions and errors | `DumpFormat`, `DumpVersion`, `DumpException` | `CsToBeamNG.Dump` |
-| Sections | per section: `TerrainSection` (names and sizes), `TerrainSectionContent`, `TerrainSectionWriter`, `TerrainSectionReader` (.NET 10); the same for `Water…`, `NetPrefabs…`, `NetNodes…`, `NetSegments…` and `NetLanes…`; records `WaterSourceRecord`, `NetPrefabRecord`, `NetPrefabLane`, `NetNodeRecord`, `NetSegmentRecord`, `NetCorner`, `NetLaneRecord`; `GridGeometry`, `DumpVector3`, `DumpBezier3` | `CsToBeamNG.Dump.Sections` |
+| Sections | per section: `TerrainSection` (names and sizes), `TerrainSectionContent`, `TerrainSectionWriter`, `TerrainSectionReader` (.NET 10); the same for `Water…`, `NetPrefabs…`, `NetNodes…`, `NetSegments…`, `NetLanes…`, `BuildingPrefabs…`, `Buildings…`, `PropPrefabs…`, `Props…`, `TreePrefabs…` and `Trees…`; records `WaterSourceRecord`, `NetPrefabRecord`, `NetPrefabLane`, `NetNodeRecord`, `NetSegmentRecord`, `NetCorner`, `NetLaneRecord`, `BuildingPrefabRecord`, `BuildingSubBuilding`, `BuildingRecord`, `PropPrefabRecord`, `PropRecord`, `TreePrefabRecord`, `TreeRecord`; `GridGeometry`, `DumpVector3`, `DumpBezier3`, `DumpColor`, `DumpBounds`, `DumpItemClass` | `CsToBeamNG.Dump.Sections` |
 
 Readers report a dump they can't read with a `DumpException` whose `Kind` says why: `NotFound`, `Corrupt`, `Incompatible` or `Incomplete`. The message names the file and, for JSON, the location in it, such as `$.sections[2].version`.
 
@@ -665,3 +916,4 @@ Readers report a dump they can't read with a `DumpException` whose `Kind` says w
 | Format 0.1 | 2026-11-17 | First version (step 0.3): layout, names, manifest, record files, string tables, JSON conventions. Completed before the first dump (step 0.4): the `counts` keys, the dump folder's location and name, the content of `game.mods`. The `probes` folder for developer probes, outside the format (step 0.7). |
 | `terrain` 0.1, `water` 0.1 | 2026-11-17 | First sections (step 1.2), with the [grid](#grids) convention. |
 | `net-prefabs` 0.1, `net-nodes` 0.1, `net-segments` 0.1, `net-lanes` 0.1 | 2026-11-17 | The networks (step 1.3), with the [vector and curve](#vectors-and-curves) convention; the `netPrefabs` failure key. |
+| `building-prefabs` 0.1, `buildings` 0.1, `prop-prefabs` 0.1, `props` 0.1, `tree-prefabs` 0.1, `trees` 0.1 | 2026-11-17 | Buildings, props and trees (step 1.4), with colours and boxes added to the [vector and curve](#vectors-and-curves) convention; the `buildingPrefabs`, `propPrefabs` and `treePrefabs` failure keys. |

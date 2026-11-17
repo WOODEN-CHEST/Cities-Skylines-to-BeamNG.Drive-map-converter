@@ -23,6 +23,9 @@ internal sealed class ExportJob
     private readonly CityReader _reader;
     private readonly TerrainReader? _terrain;
     private readonly NetworkReader? _network;
+    private readonly BuildingReader? _buildings;
+    private readonly PropReader? _props;
+    private readonly TreeReader? _trees;
     private readonly string _dumpsFolder;
     private readonly DateTime _startUtc;
     private readonly DumpManifest _manifest;
@@ -35,6 +38,9 @@ internal sealed class ExportJob
         CityReader reader,
         TerrainReader? terrain,
         NetworkReader? network,
+        BuildingReader? buildings,
+        PropReader? props,
+        TreeReader? trees,
         string dumpsFolder,
         DateTime startUtc,
         DumpManifest manifest,
@@ -45,6 +51,9 @@ internal sealed class ExportJob
         _reader = reader;
         _terrain = terrain;
         _network = network;
+        _buildings = buildings;
+        _props = props;
+        _trees = trees;
         _dumpsFolder = dumpsFolder;
         _startUtc = startUtc;
         _manifest = manifest;
@@ -64,8 +73,11 @@ internal sealed class ExportJob
         DateTime startUtc = DateTime.UtcNow;
         CityReader reader = CityReader.Create();
         var problems = new List<string>();
-        TerrainReader? terrain = CreateTerrainReader(problems);
-        NetworkReader? network = CreateNetworkReader(problems);
+        TerrainReader? terrain = CreateReader(TerrainReader.Create, "The terrain and the water", problems);
+        NetworkReader? network = CreateReader(NetworkReader.Create, "The networks", problems);
+        BuildingReader? buildings = CreateReader(BuildingReader.Create, "The buildings", problems);
+        PropReader? props = CreateReader(PropReader.Create, "The props", problems);
+        TreeReader? trees = CreateReader(TreeReader.Create, "The trees", problems);
         IList<GameModInfo> mods = ModListReader.ReadEnabledMods(problems);
         DumpManifest manifest = ManifestBuilder.CreateInitial(
             GetExporterVersion(),
@@ -73,7 +85,7 @@ internal sealed class ExportJob
             mods,
             reader.ReadCityName(),
             startUtc);
-        return new ExportJob(reader, terrain, network, dumpsFolder, startUtc, manifest, problems, BuildConfig.applicationVersionFull, new List<string>(probes));
+        return new ExportJob(reader, terrain, network, buildings, props, trees, dumpsFolder, startUtc, manifest, problems, BuildConfig.applicationVersionFull, new List<string>(probes));
     }
 
     /// <summary>Marks the export as abandoned because the city is being closed, so <see cref="Run"/> won't read it.</summary>
@@ -135,28 +147,17 @@ internal sealed class ExportJob
         }
     }
 
-    private static TerrainReader? CreateTerrainReader(List<string> problems)
+    // A reader whose manager is missing leaves its sections out with a warning; the export goes on.
+    private static T? CreateReader<T>(Func<T> create, string what, List<string> problems)
+        where T : class
     {
         try
         {
-            return TerrainReader.Create();
+            return create();
         }
         catch (InvalidOperationException e)
         {
-            problems.Add("The terrain and the water can't be exported: " + e.Message);
-            return null;
-        }
-    }
-
-    private static NetworkReader? CreateNetworkReader(List<string> problems)
-    {
-        try
-        {
-            return NetworkReader.Create();
-        }
-        catch (InvalidOperationException e)
-        {
-            problems.Add("The networks can't be exported: " + e.Message);
+            problems.Add(what + " can't be exported: " + e.Message);
             return null;
         }
     }
@@ -165,6 +166,7 @@ internal sealed class ExportJob
     // (agents/conventions.md, one bad object must not abort an export).
     private void WriteSections(DumpWriter writer, ExportLog log)
     {
+        Stopwatch watch = Stopwatch.StartNew();
         if (_terrain is not null)
         {
             WriteTerrainSections(writer, log, _terrain);
@@ -174,6 +176,23 @@ internal sealed class ExportJob
         {
             WriteNetworkSections(writer, log, _network);
         }
+
+        if (_buildings is not null)
+        {
+            WriteBuildingSections(writer, log, _buildings);
+        }
+
+        if (_props is not null)
+        {
+            WritePropSections(writer, log, _props);
+        }
+
+        if (_trees is not null)
+        {
+            WriteTreeSections(writer, log, _trees);
+        }
+
+        log.Info(string.Format(CultureInfo.InvariantCulture, "All sections written in {0} ms", watch.ElapsedMilliseconds));
     }
 
     private void WriteTerrainSections(DumpWriter writer, ExportLog log, TerrainReader terrainReader)
@@ -229,6 +248,68 @@ internal sealed class ExportJob
             ReportFailures(log, failures);
             NetLanesSectionWriter.Write(writer, lanes);
             return SectionSummary.Describe(lanes);
+        });
+    }
+
+    // Prefabs first, as for the networks; the instances refer to them by index (docs/dump-format.md, Buildings, props
+    // and trees).
+    private void WriteBuildingSections(DumpWriter writer, ExportLog log, BuildingReader reader)
+    {
+        WriteSection(log, BuildingPrefabsSection.Name, () =>
+        {
+            var failures = new ObjectFailures(CountKeys.BuildingPrefabs, "building prefabs");
+            BuildingPrefabsSectionContent prefabs = reader.ReadPrefabs(failures);
+            ReportFailures(log, failures);
+            BuildingPrefabsSectionWriter.Write(writer, prefabs);
+            return SectionSummary.Describe(prefabs);
+        });
+        WriteSection(log, BuildingsSection.Name, () =>
+        {
+            var failures = new ObjectFailures(CountKeys.Buildings, "buildings");
+            BuildingsSectionContent buildings = reader.ReadBuildings(failures);
+            ReportFailures(log, failures);
+            BuildingsSectionWriter.Write(writer, buildings);
+            return SectionSummary.Describe(buildings);
+        });
+    }
+
+    private void WritePropSections(DumpWriter writer, ExportLog log, PropReader reader)
+    {
+        WriteSection(log, PropPrefabsSection.Name, () =>
+        {
+            var failures = new ObjectFailures(CountKeys.PropPrefabs, "prop prefabs");
+            PropPrefabsSectionContent prefabs = reader.ReadPrefabs(failures);
+            ReportFailures(log, failures);
+            PropPrefabsSectionWriter.Write(writer, prefabs);
+            return SectionSummary.Describe(prefabs);
+        });
+        WriteSection(log, PropsSection.Name, () =>
+        {
+            var failures = new ObjectFailures(CountKeys.Props, "props");
+            PropsSectionContent props = reader.ReadProps(failures);
+            ReportFailures(log, failures);
+            PropsSectionWriter.Write(writer, props);
+            return SectionSummary.Describe(props);
+        });
+    }
+
+    private void WriteTreeSections(DumpWriter writer, ExportLog log, TreeReader reader)
+    {
+        WriteSection(log, TreePrefabsSection.Name, () =>
+        {
+            var failures = new ObjectFailures(CountKeys.TreePrefabs, "tree prefabs");
+            TreePrefabsSectionContent prefabs = reader.ReadPrefabs(failures);
+            ReportFailures(log, failures);
+            TreePrefabsSectionWriter.Write(writer, prefabs);
+            return SectionSummary.Describe(prefabs);
+        });
+        WriteSection(log, TreesSection.Name, () =>
+        {
+            var failures = new ObjectFailures(CountKeys.Trees, "trees");
+            TreesSectionContent trees = reader.ReadTrees(failures);
+            ReportFailures(log, failures);
+            TreesSectionWriter.Write(writer, trees);
+            return SectionSummary.Describe(trees);
         });
     }
 

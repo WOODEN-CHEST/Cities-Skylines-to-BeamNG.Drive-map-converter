@@ -33,7 +33,7 @@ public sealed class TerrainLoaderTests : IDisposable
         Assert.Equal(20 + (16.0 / 8), terrain.RawHeights.Sample(16, 3), 9);
         Assert.Equal(21 + (24.0 / 8), terrain.FinalHeights.Sample(-5, 24), 9);
         Assert.Equal(30, terrain.SampleGround(0, 0), 9);
-        Assert.Equal(["water", "net-prefabs", "net-nodes", "net-segments", "net-lanes"], result.MissingSections);
+        Assert.Equal(["water", "net-prefabs", "net-nodes", "net-segments", "net-lanes", "building-prefabs", "buildings", "prop-prefabs", "props", "tree-prefabs", "trees"], result.MissingSections);
     }
 
     [Fact]

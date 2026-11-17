@@ -72,6 +72,6 @@ public sealed class CityWaterTests : IDisposable
         Assert.Equal(4u, Assert.Single(water.Sources).Id);
         LoadMessage warning = Assert.Single(result.Messages);
         Assert.Equal(new LoadMessage(LoadMessageSeverity.Warning, "Water source 5 has a position that isn't finite, so it is skipped.", "water"), warning);
-        Assert.Equal(["terrain", "net-prefabs", "net-nodes", "net-segments", "net-lanes"], result.MissingSections);
+        Assert.Equal(["terrain", "net-prefabs", "net-nodes", "net-segments", "net-lanes", "building-prefabs", "buildings", "prop-prefabs", "props", "tree-prefabs", "trees"], result.MissingSections);
     }
 }

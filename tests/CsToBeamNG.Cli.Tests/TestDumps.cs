@@ -8,7 +8,7 @@ namespace CsToBeamNG.Cli.Tests;
 
 /// <summary>
 /// Writes small synthetic dumps with the real dump writer: a manifest and, optionally, a section no loader knows, a
-/// coarse terrain and water, or a small network.
+/// coarse terrain and water, a small network, or a few buildings, props and trees.
 /// </summary>
 internal static class TestDumps
 {
@@ -35,7 +35,8 @@ internal static class TestDumps
     /// <returns>The dump folder's full path.</returns>
     /// <param name="terrainAndWater">Whether to add a coarse terrain and water (<see cref="AddTerrainAndWater"/>).</param>
     /// <param name="networks">Whether to add a small network (<see cref="AddNetworks"/>).</param>
-    public static string Write(string folder, DumpManifest? manifest = null, bool complete = true, string? unknownSection = null, bool terrainAndWater = false, bool networks = false)
+    /// <param name="objects">Whether to add a few buildings, props and trees (<see cref="AddObjects"/>).</param>
+    public static string Write(string folder, DumpManifest? manifest = null, bool complete = true, string? unknownSection = null, bool terrainAndWater = false, bool networks = false, bool objects = false)
     {
         manifest ??= Manifest();
         manifest.Complete = false;
@@ -49,6 +50,11 @@ internal static class TestDumps
         if (networks)
         {
             AddNetworks(writer);
+        }
+
+        if (objects)
+        {
+            AddObjects(writer);
         }
 
         if (unknownSection is not null)
@@ -94,6 +100,69 @@ internal static class TestDumps
         var lanes = new NetLanesSectionContent();
         lanes.Lanes.Add(new NetLaneRecord { Id = 7, Segment = 1, Index = 0, Bezier = segments.Segments[0].Bezier, Length = 200 });
         NetLanesSectionWriter.Write(writer, lanes);
+    }
+
+    /// <summary>
+    /// Adds a residential prefab with two houses inside the unlocked tile (4, 4), at (−100, 50) and (100, 150), and one
+    /// far outside it at (−5000, 0); a bench prefab with one bench; and a tree prefab with two trees, one not grown.
+    /// </summary>
+    private static void AddObjects(DumpWriter writer)
+    {
+        var buildingPrefabs = new BuildingPrefabsSectionContent();
+        var house = new BuildingPrefabRecord
+        {
+            Index = 3,
+            Name = "L1 2x2 Detached",
+            Class = new DumpItemClass { Name = "Low Residential - Level1", Service = "Residential", SubService = "ResidentialLow", Level = "Level1", Layer = 1 },
+            AiType = "ResidentialBuildingAI",
+            CellWidth = 2,
+            CellLength = 2,
+            Size = new DumpVector3(16, 10, 16),
+            PlacementMode = "Roadside",
+            ZoningMode = "Straight",
+        };
+        buildingPrefabs.Prefabs.Add(house);
+        BuildingPrefabsSectionWriter.Write(writer, buildingPrefabs);
+
+        var buildings = new BuildingsSectionContent();
+        foreach ((uint id, float x, float z) in new[] { (1u, -100f, 50f), (2u, 100f, 150f), (3u, -5000f, 0f) })
+        {
+            buildings.Buildings.Add(new BuildingRecord
+            {
+                Id = id,
+                Flags = BuildingRecord.CreatedFlag | BuildingRecord.CompletedFlag,
+                Prefab = 3,
+                Position = new DumpVector3(x, 60, z),
+                MeshPosition = new DumpVector3(x, 60, z),
+                Color = new DumpColor(1, 1, 1, 1),
+                Width = 2,
+                Length = 2,
+            });
+        }
+
+        BuildingsSectionWriter.Write(writer, buildings);
+
+        var propPrefabs = new PropPrefabsSectionContent();
+        propPrefabs.Prefabs.Add(new PropPrefabRecord
+        {
+            Index = 4,
+            Name = "Bench",
+            Mesh = new DumpBounds(new DumpVector3(-1, 0, -0.5f), new DumpVector3(1, 1, 0.5f)),
+            MinScale = 1,
+            MaxScale = 1,
+        });
+        PropPrefabsSectionWriter.Write(writer, propPrefabs);
+        var props = new PropsSectionContent();
+        props.Props.Add(new PropRecord { Id = 1, Prefab = 4, Position = new DumpVector3(0, 60, 100), Scale = 1, Flags = PropRecord.CreatedFlag });
+        PropsSectionWriter.Write(writer, props);
+
+        var treePrefabs = new TreePrefabsSectionContent();
+        treePrefabs.Prefabs.Add(new TreePrefabRecord { Index = 5, Name = "Oak", MinScale = 0.5f, MaxScale = 1.5f, MinBrightness = 0.75f, MaxBrightness = 1.25f });
+        TreePrefabsSectionWriter.Write(writer, treePrefabs);
+        var trees = new TreesSectionContent();
+        trees.Trees.Add(new TreeRecord { Id = 1, Prefab = 5, Position = new DumpVector3(50, 60, 100), Scale = 0.5f, Brightness = 1, Flags = TreeRecord.CreatedFlag | 0x100 });
+        trees.Trees.Add(new TreeRecord { Id = 2, Prefab = 5, Position = new DumpVector3(-50, 60, 100), Scale = 1.5f, Brightness = 1, Flags = TreeRecord.CreatedFlag });
+        TreesSectionWriter.Write(writer, trees);
     }
 
     private static NetPrefabRecord Road(uint index, string name, string level, float halfWidth, bool highway)

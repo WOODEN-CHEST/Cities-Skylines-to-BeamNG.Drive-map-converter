@@ -30,7 +30,7 @@ public sealed class NetworkLoaderTests : IDisposable
         Assert.All(result.Sections, section => Assert.Equal(SectionLoadStatus.Loaded, section.Status));
         Assert.Equal(["net-prefabs", "net-nodes", "net-segments", "net-lanes"], result.Sections.Select(section => section.Section.Name));
         Assert.Empty(result.Messages);
-        Assert.Equal(["terrain", "water"], result.MissingSections);
+        Assert.Equal(["terrain", "water", "building-prefabs", "buildings", "prop-prefabs", "props", "tree-prefabs", "trees"], result.MissingSections);
         CityNetPrefabs prefabs = Assert.IsType<CityNetPrefabs>(result.World.Find<CityNetPrefabs>());
         CityNetNodes nodes = Assert.IsType<CityNetNodes>(result.World.Find<CityNetNodes>());
         CityNetSegments segments = Assert.IsType<CityNetSegments>(result.World.Find<CityNetSegments>());
@@ -154,7 +154,7 @@ public sealed class NetworkLoaderTests : IDisposable
         WorldLoadResult result = WorldLoader.Load(folder);
 
         Assert.Empty(result.Messages);
-        Assert.Equal(["net-lanes", "net-prefabs", "terrain", "water"], result.MissingSections.Order(StringComparer.Ordinal));
+        Assert.Equal(["building-prefabs", "buildings", "net-lanes", "net-prefabs", "prop-prefabs", "props", "terrain", "tree-prefabs", "trees", "water"], result.MissingSections.Order(StringComparer.Ordinal));
         Assert.Equal(
             [
                 ("segments", "3, 2.16 km of centre lines"),

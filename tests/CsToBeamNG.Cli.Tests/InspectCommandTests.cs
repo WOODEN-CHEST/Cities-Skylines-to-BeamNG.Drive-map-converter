@@ -52,7 +52,7 @@ public sealed class InspectCommandTests : IDisposable
 
             Sections
               none
-              Not in the dump: terrain, water, net-prefabs, net-nodes, net-segments, net-lanes
+              Not in the dump: terrain, water, net-prefabs, net-nodes, net-segments, net-lanes, building-prefabs, buildings, prop-prefabs, props, tree-prefabs, trees
 
             Area of interest
               Bounds:         x -960 to 960, z -960 to 960 (1920 × 1920 m)
@@ -127,7 +127,7 @@ public sealed class InspectCommandTests : IDisposable
             + "    water sources: 1: 1 natural, 0 of buildings, 0 of water treatment\n",
             output,
             StringComparison.Ordinal);
-        Assert.Contains("  Not in the dump: net-prefabs, net-nodes, net-segments, net-lanes\n", output, StringComparison.Ordinal);
+        Assert.Contains("  Not in the dump: net-prefabs, net-nodes, net-segments, net-lanes, building-prefabs, buildings, prop-prefabs, props, tree-prefabs, trees\n", output, StringComparison.Ordinal);
         Assert.Contains("\n    terrain: the ground the game draws", output, StringComparison.Ordinal);
         Assert.Contains("\n    water: water at least 0.31 m deep", output, StringComparison.Ordinal);
         Assert.Equal((64, 64), PngSize(image));
@@ -168,6 +168,39 @@ public sealed class InspectCommandTests : IDisposable
         Assert.Contains("  Bounds:         x -600 to 600, z -500 to 500 (1200 × 1000 m)\n", output, StringComparison.Ordinal);
         Assert.Contains("\n    networks: segments as bands of their width", output, StringComparison.Ordinal);
         Assert.Equal((128, 107), PngSize(image));
+    }
+
+    [Fact]
+    public void ReportsAndDrawsBuildingsPropsAndTrees()
+    {
+        using var scope = new CultureScope("lv-LV");
+        string folder = TestDumps.Write(_temp.PathOf("dump"), objects: true);
+        string image = _temp.PathOf("objects.png");
+
+        int exitCode = InspectCommand.Inspect(new InspectRequest(folder) { RenderPath = image, RenderSize = 120 }, _output, _error);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(_error.ToString());
+        string output = Output();
+        Assert.Contains(
+            "    prefabs: 1, 0 with sub-buildings\n"
+            + "    by category: 1 residential, 0 commercial, 0 industrial, 0 office, 0 other\n",
+            output,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "    buildings: 3: 0 sub-buildings, 0 not drawn\n"
+            + "    by category: 3 residential, 0 commercial, 0 industrial, 0 office, 0 other\n"
+            + "    states: 0 without the completed flag, 0 abandoned, 0 collapsed\n"
+            + "    content: 2 buildings within x -100 to 100, z 50 to 150\n",
+            output,
+            StringComparison.Ordinal);
+        Assert.Contains("    props: 1: 0 not drawn, 0 with a fixed height\n    decals: 0\n    scales: 1 to 1\n", output, StringComparison.Ordinal);
+        Assert.Contains("    trees: 2: 1 not drawn, 0 with a fixed height\n    scales: 0.5 to 1.5\n    brightness: 1 to 1\n", output, StringComparison.Ordinal);
+        Assert.Contains("  Bounds:         x -600 to 600, z -450 to 650 (1200 × 1100 m)\n", output, StringComparison.Ordinal);
+        Assert.Contains("\n    trees: trees as dark green dots", output, StringComparison.Ordinal);
+        Assert.Contains("\n    buildings: building lots coloured by zone", output, StringComparison.Ordinal);
+        Assert.Contains("\n    props: props as magenta dots", output, StringComparison.Ordinal);
+        Assert.Equal((120, 110), PngSize(image));
     }
 
     [Fact]

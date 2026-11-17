@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using CsToBeamNG.Converter.Buildings;
 using CsToBeamNG.Converter.Networks;
+using CsToBeamNG.Converter.Props;
 using CsToBeamNG.Converter.Terrain;
+using CsToBeamNG.Converter.Trees;
 using CsToBeamNG.Converter.Water;
 
 namespace CsToBeamNG.Converter.Loading;
@@ -20,9 +23,9 @@ public sealed class SectionLoaderRegistry
 
     /// <summary>Creates the registry with every loader the converter has.</summary>
     /// <remarks>
-    /// One loader per section of docs/dump-format.md, Sections: terrain, water and the networks so far; the export steps
-    /// add buildings, props and trees here. The network loaders check references against the network sections loaded
-    /// before them, so they run prefabs, nodes, segments, lanes.
+    /// One loader per section of docs/dump-format.md, Sections: terrain, water, the networks, buildings, props and trees.
+    /// Loaders check references against the sections loaded before them, so prefabs load before the objects that use
+    /// them, and the networks run prefabs, nodes, segments, lanes.
     /// </remarks>
     public static SectionLoaderRegistry CreateDefault() => new SectionLoaderRegistry()
         .Add(new TerrainLoader())
@@ -30,7 +33,13 @@ public sealed class SectionLoaderRegistry
         .Add(new NetPrefabsLoader())
         .Add(new NetNodesLoader())
         .Add(new NetSegmentsLoader())
-        .Add(new NetLanesLoader());
+        .Add(new NetLanesLoader())
+        .Add(new BuildingPrefabsLoader())
+        .Add(new BuildingsLoader())
+        .Add(new PropPrefabsLoader())
+        .Add(new PropsLoader())
+        .Add(new TreePrefabsLoader())
+        .Add(new TreesLoader());
 
     /// <summary>Registers a loader; it runs after the ones registered before it.</summary>
     /// <param name="loader">The loader.</param>

@@ -2,9 +2,22 @@ using CsToBeamNG.Dump.Records;
 
 namespace CsToBeamNG.Dump.Sections;
 
-/// <summary>Writes and reads vectors and curves as consecutive <c>f32</c> fields of a record (docs/dump-format.md, Sections).</summary>
+/// <summary>Writes and reads vectors, curves and colours as consecutive <c>f32</c> fields of a record (docs/dump-format.md, Sections).</summary>
 internal static class RecordVectors
 {
+    /// <summary>Writes the fields R, G, B and A.</summary>
+    public static void Write(RecordFileWriter records, DumpColor color)
+    {
+        records.WriteSingle(color.R);
+        records.WriteSingle(color.G);
+        records.WriteSingle(color.B);
+        records.WriteSingle(color.A);
+    }
+
+    /// <summary>Reads the fields R, G, B and A.</summary>
+    public static DumpColor ReadColor(RecordFileReader records) =>
+        new(records.ReadSingle(), records.ReadSingle(), records.ReadSingle(), records.ReadSingle());
+
     /// <summary>Writes the fields X, Y and Z.</summary>
     public static void Write(RecordFileWriter records, DumpVector3 vector)
     {

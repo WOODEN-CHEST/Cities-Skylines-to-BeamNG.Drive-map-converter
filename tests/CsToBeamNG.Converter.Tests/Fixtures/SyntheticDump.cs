@@ -123,6 +123,53 @@ internal sealed class SyntheticDump
         return this;
     }
 
+    /// <summary>
+    /// Adds the sections of buildings, props and trees, written by the real section writers; a <see langword="null"/>
+    /// content leaves its section out.
+    /// </summary>
+    public SyntheticDump WithObjects(
+        BuildingPrefabsSectionContent? buildingPrefabs,
+        BuildingsSectionContent? buildings,
+        PropPrefabsSectionContent? propPrefabs,
+        PropsSectionContent? props,
+        TreePrefabsSectionContent? treePrefabs,
+        TreesSectionContent? trees)
+    {
+        _sections.Add(dump =>
+        {
+            if (buildingPrefabs is not null)
+            {
+                BuildingPrefabsSectionWriter.Write(dump, buildingPrefabs);
+            }
+
+            if (buildings is not null)
+            {
+                BuildingsSectionWriter.Write(dump, buildings);
+            }
+
+            if (propPrefabs is not null)
+            {
+                PropPrefabsSectionWriter.Write(dump, propPrefabs);
+            }
+
+            if (props is not null)
+            {
+                PropsSectionWriter.Write(dump, props);
+            }
+
+            if (treePrefabs is not null)
+            {
+                TreePrefabsSectionWriter.Write(dump, treePrefabs);
+            }
+
+            if (trees is not null)
+            {
+                TreesSectionWriter.Write(dump, trees);
+            }
+        });
+        return this;
+    }
+
     /// <summary>Adds a section that the test writes itself, such as records that the section writers would reject.</summary>
     public SyntheticDump WithCustomSection(Action<DumpWriter> write)
     {

@@ -137,6 +137,113 @@ internal static class SectionSummary
             (meters / 1000).ToString("0.###", CultureInfo.InvariantCulture));
     }
 
+    /// <summary>Describes building prefabs: how many, and how many of them have sub-buildings.</summary>
+    /// <param name="prefabs">The prefabs.</param>
+    public static string Describe(BuildingPrefabsSectionContent prefabs)
+    {
+        int withSubBuildings = 0;
+        foreach (BuildingPrefabRecord prefab in prefabs.Prefabs)
+        {
+            withSubBuildings += prefab.SubBuildings.Count > 0 ? 1 : 0;
+        }
+
+        return string.Format(CultureInfo.InvariantCulture, "{0} prefabs, {1} with sub-buildings", prefabs.Prefabs.Count, withSubBuildings);
+    }
+
+    /// <summary>Describes buildings: how many, how many are sub-buildings, and how many are abandoned, collapsed or not drawn.</summary>
+    /// <param name="buildings">The buildings.</param>
+    public static string Describe(BuildingsSectionContent buildings)
+    {
+        int subBuildings = 0;
+        int abandoned = 0;
+        int collapsed = 0;
+        int notDrawn = 0;
+        foreach (BuildingRecord building in buildings.Buildings)
+        {
+            subBuildings += building.ParentBuilding != 0 ? 1 : 0;
+            abandoned += building.HasFlags(BuildingRecord.AbandonedFlag) ? 1 : 0;
+            collapsed += building.HasFlags(BuildingRecord.CollapsedFlag) ? 1 : 0;
+            notDrawn += building.IsDrawn ? 0 : 1;
+        }
+
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            "{0} buildings: {1} sub-buildings, {2} abandoned, {3} collapsed, {4} not drawn",
+            buildings.Buildings.Count,
+            subBuildings,
+            abandoned,
+            collapsed,
+            notDrawn);
+    }
+
+    /// <summary>Describes prop prefabs: how many, and how many are decals, markers or have lights.</summary>
+    /// <param name="prefabs">The prefabs.</param>
+    public static string Describe(PropPrefabsSectionContent prefabs)
+    {
+        int decals = 0;
+        int markers = 0;
+        int lights = 0;
+        foreach (PropPrefabRecord prefab in prefabs.Prefabs)
+        {
+            decals += prefab.Decal ? 1 : 0;
+            markers += prefab.Marker ? 1 : 0;
+            lights += prefab.LightEffects ? 1 : 0;
+        }
+
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            "{0} prefabs: {1} decals, {2} markers, {3} with lights",
+            prefabs.Prefabs.Count,
+            decals,
+            markers,
+            lights);
+    }
+
+    /// <summary>Describes props: how many, how many keep their height, and how many the game doesn't draw.</summary>
+    /// <param name="props">The props.</param>
+    public static string Describe(PropsSectionContent props)
+    {
+        int fixedHeight = 0;
+        int notDrawn = 0;
+        foreach (PropRecord prop in props.Props)
+        {
+            fixedHeight += prop.HasFlags(PropRecord.FixedHeightFlag) ? 1 : 0;
+            notDrawn += prop.IsDrawn ? 0 : 1;
+        }
+
+        return string.Format(CultureInfo.InvariantCulture, "{0} props: {1} with a fixed height, {2} not drawn", props.Props.Count, fixedHeight, notDrawn);
+    }
+
+    /// <summary>Describes tree prefabs: how many.</summary>
+    /// <param name="prefabs">The prefabs.</param>
+    public static string Describe(TreePrefabsSectionContent prefabs) =>
+        string.Format(CultureInfo.InvariantCulture, "{0} prefabs", prefabs.Prefabs.Count);
+
+    /// <summary>Describes trees: how many, how many the game doesn't draw, and the range of their scales.</summary>
+    /// <param name="trees">The trees.</param>
+    public static string Describe(TreesSectionContent trees)
+    {
+        int notDrawn = 0;
+        float minScale = float.PositiveInfinity;
+        float maxScale = float.NegativeInfinity;
+        foreach (TreeRecord tree in trees.Trees)
+        {
+            notDrawn += tree.IsDrawn ? 0 : 1;
+            minScale = tree.Scale < minScale ? tree.Scale : minScale;
+            maxScale = tree.Scale > maxScale ? tree.Scale : maxScale;
+        }
+
+        return trees.Trees.Count == 0
+            ? "0 trees"
+            : string.Format(
+                CultureInfo.InvariantCulture,
+                "{0} trees: {1} not drawn; scales {2} to {3}",
+                trees.Trees.Count,
+                notDrawn,
+                minScale.ToString("0.###", CultureInfo.InvariantCulture),
+                maxScale.ToString("0.###", CultureInfo.InvariantCulture));
+    }
+
     private static string Range(ushort[] heights, float metersPerUnit)
     {
         if (heights.Length == 0)

@@ -90,6 +90,18 @@ internal sealed class JsonFieldReader
         return value;
     }
 
+    /// <summary>An optional object, or <see langword="null"/> if it is absent.</summary>
+    public JsonElement? OptionalObject(JsonElement parent, string name, string parentPath)
+    {
+        if (!TryGetOptional(parent, name, out JsonElement value))
+        {
+            return null;
+        }
+
+        RequireObject(value, Child(parentPath, name));
+        return value;
+    }
+
     public string RequiredString(JsonElement parent, string name, string parentPath) =>
         GetString(Required(parent, name, parentPath), Child(parentPath, name));
 
@@ -151,6 +163,10 @@ internal sealed class JsonFieldReader
 
         return value;
     }
+
+    /// <summary>A whole number from 0 to <see cref="uint.MaxValue"/>, or <see langword="null"/> if absent.</summary>
+    public uint? OptionalUInt32(JsonElement parent, string name, string parentPath) =>
+        TryGetOptional(parent, name, out _) ? RequiredUInt32(parent, name, parentPath) : null;
 
     /// <summary>A finite number, read as a 32-bit float (docs/dump-format.md, JSON files).</summary>
     public float RequiredSingle(JsonElement parent, string name, string parentPath)

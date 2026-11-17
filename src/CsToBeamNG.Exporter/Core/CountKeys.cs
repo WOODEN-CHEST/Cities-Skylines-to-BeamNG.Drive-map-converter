@@ -26,4 +26,13 @@ internal static class CountKeys
 
     /// <summary>Trees (<c>TreeManager.m_trees</c>).</summary>
     public const string Trees = "trees";
+
+    /// <summary>Building prefabs that buildings use. Only a <c>failureCounts</c> key, like <see cref="NetPrefabs"/>.</summary>
+    public const string BuildingPrefabs = "buildingPrefabs";
+
+    /// <summary>Prop prefabs that props use. Only a <c>failureCounts</c> key, like <see cref="NetPrefabs"/>.</summary>
+    public const string PropPrefabs = "propPrefabs";
+
+    /// <summary>Tree prefabs that trees use. Only a <c>failureCounts</c> key, like <see cref="NetPrefabs"/>.</summary>
+    public const string TreePrefabs = "treePrefabs";
 }

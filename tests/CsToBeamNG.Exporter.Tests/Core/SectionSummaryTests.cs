@@ -77,4 +77,39 @@ public sealed class SectionSummaryTests
         Assert.Equal("2 segments, 1.501 km long by their average lane lengths", SectionSummary.Describe(segments));
         Assert.Equal("1 lanes, 0.1 km long", SectionSummary.Describe(lanes));
     }
+
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("lv-LV")]
+    public void DescribesBuildingsPropsAndTrees(string culture)
+    {
+        using var scope = new CultureScope(culture);
+        var buildingPrefabs = new BuildingPrefabsSectionContent();
+        buildingPrefabs.Prefabs.Add(new BuildingPrefabRecord { Index = 1 });
+        buildingPrefabs.Prefabs.Add(new BuildingPrefabRecord { Index = 2 });
+        buildingPrefabs.Prefabs[1].SubBuildings.Add(new BuildingSubBuilding());
+        var buildings = new BuildingsSectionContent();
+        buildings.Buildings.Add(new BuildingRecord { Flags = BuildingRecord.CreatedFlag | BuildingRecord.AbandonedFlag });
+        buildings.Buildings.Add(new BuildingRecord { Flags = BuildingRecord.CreatedFlag | BuildingRecord.CollapsedFlag, ParentBuilding = 1 });
+        buildings.Buildings.Add(new BuildingRecord { Flags = BuildingRecord.CreatedFlag | BuildingRecord.HiddenFlag });
+        var propPrefabs = new PropPrefabsSectionContent();
+        propPrefabs.Prefabs.Add(new PropPrefabRecord { Decal = true });
+        propPrefabs.Prefabs.Add(new PropPrefabRecord { Marker = true, LightEffects = true });
+        var props = new PropsSectionContent();
+        props.Props.Add(new PropRecord { Flags = PropRecord.CreatedFlag | PropRecord.FixedHeightFlag });
+        props.Props.Add(new PropRecord { Flags = PropRecord.CreatedFlag | PropRecord.BlockedFlag });
+        var treePrefabs = new TreePrefabsSectionContent();
+        treePrefabs.Prefabs.Add(new TreePrefabRecord());
+        var trees = new TreesSectionContent();
+        trees.Trees.Add(new TreeRecord { Flags = TreeRecord.CreatedFlag | 0x100, Scale = 0.75f });
+        trees.Trees.Add(new TreeRecord { Flags = TreeRecord.CreatedFlag, Scale = 1.3333f });
+
+        Assert.Equal("2 prefabs, 1 with sub-buildings", SectionSummary.Describe(buildingPrefabs));
+        Assert.Equal("3 buildings: 1 sub-buildings, 1 abandoned, 1 collapsed, 1 not drawn", SectionSummary.Describe(buildings));
+        Assert.Equal("2 prefabs: 1 decals, 1 markers, 1 with lights", SectionSummary.Describe(propPrefabs));
+        Assert.Equal("2 props: 1 with a fixed height, 1 not drawn", SectionSummary.Describe(props));
+        Assert.Equal("1 prefabs", SectionSummary.Describe(treePrefabs));
+        Assert.Equal("2 trees: 1 not drawn; scales 0.75 to 1.333", SectionSummary.Describe(trees));
+        Assert.Equal("0 trees", SectionSummary.Describe(new TreesSectionContent()));
+    }
 }
