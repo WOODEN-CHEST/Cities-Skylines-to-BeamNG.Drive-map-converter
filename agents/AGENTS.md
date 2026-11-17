@@ -34,7 +34,7 @@ Rationale, conversion stages and the decision log are in [docs/architecture.md](
 | Path | Contents | In git |
 |---|---|---|
 | `src/CsToBeamNG.Exporter/` | CS1 mod (net35); its `Core/` folder holds the game-independent part, which the tests compile in | yes |
-| `src/CsToBeamNG.Dump/` | dump format: model, readers, writers (net35 + net10.0) | yes |
+| `src/CsToBeamNG.Dump/` | dump format: model, readers, writers; the autorun files that the CLI and the mod exchange (net35 + net10.0) | yes |
 | `src/CsToBeamNG.Converter/` | conversion library (net10.0) | yes |
 | `src/CsToBeamNG.Cli/` | command-line front end (net10.0), executable `cstobeamng` | yes |
 | `src/Shared/` | source files compiled into several projects (net35 polyfills) | yes |
@@ -45,7 +45,7 @@ Rationale, conversion stages and the decision log are in [docs/architecture.md](
 
 Shared build settings are in `Directory.Build.props`/`.targets`, package versions in `Directory.Packages.props`, code style in `.editorconfig`, the SDK pin in `global.json`, CI in `.github/workflows/ci.yml`, and the registration of BeamNG.drive's MCP server in `.mcp.json`.
 
-In the converter, everything that knows BeamNG's formats lives in `src/CsToBeamNG.Converter/BeamNG/`: virtual paths, the scene tree, terrain, meshes, materials, `info.json` and the installer. `Development/` holds test levels such as the one `dev hello-level` installs.
+In the converter, everything that knows BeamNG's formats lives in `src/CsToBeamNG.Converter/BeamNG/`: virtual paths, the scene tree, terrain, meshes, materials, `info.json` and the installer. `Development/` holds test levels such as the one `dev hello-level` installs. `Discovery/` finds the games and their folders, and `Automation/` starts Cities: Skylines for an unattended export, whose game side is the exporter's `Autorun/` folder ([docs/architecture.md, Unattended export](../docs/architecture.md#unattended-export)).
 
 ## Build, run, test
 
@@ -59,6 +59,7 @@ dotnet format --verify-no-changes                   # style check; plain `dotnet
 dotnet run --project src/CsToBeamNG.Cli -- --help   # the CLI
 dotnet run --project src/CsToBeamNG.Cli -- doctor   # where the games and their folders are on this machine
 dotnet run --project src/CsToBeamNG.Cli -- dev hello-level   # installs a generated test level into BeamNG.drive
+dotnet run --project src/CsToBeamNG.Cli -- export CityPalma   # starts CS1, exports the save into a dump, quits (ask the user first)
 ```
 
 - Warnings are errors, including code style (`.editorconfig`) and analyzers.
@@ -93,7 +94,7 @@ The full rules are in [agents/conventions.md](conventions.md). The essentials:
 The procedures are in [agents/verification.md](verification.md).
 
 - Always build and run the tests.
-- CS1-side changes need the user to run the game; ask precisely.
+- CS1-side changes need a fresh dump. With the user's OK to run the game, export one yourself with `cstobeamng export`; otherwise ask the user precisely what to do.
 - BeamNG-side changes can be verified by the agent through BeamNG's built-in MCP server (registered in `.mcp.json`; the user starts the game with `-enablemcp`): load the level, take screenshots, read logs, inspect the AI navgraph, measure performance.
 
 ## Knowledge base

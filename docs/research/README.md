@@ -4,7 +4,7 @@ What we know about the two games' internals and file formats, collected while bu
 
 | File | Topic |
 |---|---|
-| [cs1-save-and-world.md](cs1-save-and-world.md) | Savegame container, how the simulation is stored, map geometry and tiles, terrain, water, instance storage and limits, threads, modding facts, key game APIs |
+| [cs1-save-and-world.md](cs1-save-and-world.md) | Savegame container, how the simulation is stored, map geometry and tiles, terrain, water, instance storage and limits, threads, modding facts, starting the game without the launcher, loading a save from a mod, key game APIs |
 | [cs1-networks.md](cs1-networks.md) | Roads, rails, paths: data model, render data, mesh deformation, lane props |
 | [cs1-assets.md](cs1-assets.md) | Prefabs, meshes, texture channel packing, colour variation, placement randomness |
 | [beamng-level-format.md](beamng-level-format.md) | Level structure, terrain file, objects, meshes, materials, forest, limits |

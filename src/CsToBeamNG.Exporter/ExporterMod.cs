@@ -1,4 +1,5 @@
 using System;
+using CsToBeamNG.Exporter.Autorun;
 using CsToBeamNG.Exporter.Export;
 using CsToBeamNG.Exporter.Game;
 using ICities;
@@ -16,6 +17,26 @@ public sealed class ExporterMod : IUserMod
 
     /// <inheritdoc/>
     public string Description => "Exports the loaded city for conversion into a BeamNG.drive level.";
+
+    /// <summary>
+    /// Called when the game enables the mod, which for an enabled mod happens at startup, before the main
+    /// menu loads. Picks up an autorun request if a tool left one. The game finds this method by reflection
+    /// as a public instance method (docs/research/cs1-save-and-world.md, Loading a save from a mod).
+    /// </summary>
+#pragma warning disable CA1822 // The game calls it on the mod's instance, so it can't be static.
+    public void OnEnabled()
+#pragma warning restore CA1822
+    {
+        try
+        {
+            AutorunController.OnModEnabled();
+        }
+        catch (Exception e)
+        {
+            // The game would report it as an error of this mod; autorun is optional.
+            GameLog.Warning("Autorun: the request couldn't be checked: " + e);
+        }
+    }
 
     /// <summary>
     /// Builds the mod's page in Options. The game finds this method by reflection; it isn't part of

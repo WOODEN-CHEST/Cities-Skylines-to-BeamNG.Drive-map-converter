@@ -11,16 +11,24 @@ A change is done when:
 
 The commands are listed in `agents/AGENTS.md` (Build, run, test). Run the full test suite, not just new tests, and run `dotnet format --verify-no-changes`.
 
-## 2. Cities: Skylines side (needs the user)
+## 2. Cities: Skylines side
 
-Agents cannot operate the CS1 user interface. When a change needs a fresh dump:
+CS1-side changes need a fresh dump from the game. Since step 0.6 the agent can export one itself, but running the game still needs the user's OK, because the game takes over the screen for a minute or two.
+
+**Unattended export (preferred):**
 
 1. Build. The exporter deploys itself into the CS1 mods folder.
-2. Ask the user for exactly what is needed, as a numbered list. For example:
-   > Start Cities: Skylines. In Content Manager → Mods, enable *CS to BeamNG Exporter* (first time only). Load CityPalma. Open Options, choose *CS to BeamNG Exporter* under Mod Settings, and click *Export city*. Tell me what the message says.
-3. Afterwards, read the newest dump folder in `<CS1 user data>/CsToBeamNG/dumps/`, its `manifest.json` and `export.log`, and the game log (locations in `agents/environment.md`). Look for exceptions and `[CsToBeamNG]` warnings.
+2. Ask the user once per session whether you may start Cities: Skylines, possibly several times. Tell them it starts, loads the save, exports and quits by itself, and that they shouldn't click in it. It needs the Steam client running and the exporter mod enabled in Content Manager → Mods (the setting persists).
+3. Run `dotnet run --project src/CsToBeamNG.Cli -- export <save>`, e.g. `export CityPalma` (`doctor` lists the saves). Run it in the background; it prints progress and ends with `Dump: <folder>`, or with `error: ...` and exit code 1. `--keep-running` leaves the game open afterwards; `--timeout <minutes>` (default 30) limits the wait, after which the game is stopped.
+4. Check the dump as below. The game log is overwritten at every start, so copy it into `agents/local/scratch/<step>/` if you need it later.
 
-If several changes need the game, ask once. If step 0.6 makes unattended exports possible, its tooling replaces this procedure; update this section then.
+How it works and what its messages mean: [docs/architecture.md, Unattended export](../docs/architecture.md#unattended-export). If it fails because the game exits without taking the request, the mod is probably disabled; ask the user to enable it.
+
+**Manual export (fallback):** ask the user for exactly what is needed, as a numbered list. For example:
+
+> Start Cities: Skylines. In Content Manager → Mods, enable *CS to BeamNG Exporter* (first time only). Load CityPalma. Open Options, choose *CS to BeamNG Exporter* under Mod Settings, and click *Export city*. Tell me what the message says.
+
+**Afterwards,** read the newest dump folder in `<CS1 user data>/CsToBeamNG/dumps/`, its `manifest.json` and `export.log`, and the game log (locations in `agents/environment.md`). Look for exceptions and `[CsToBeamNG]` warnings. If several changes need the game, run it once for all of them.
 
 ## 3. BeamNG side (the agent can do this)
 

@@ -43,7 +43,9 @@ App ids: Cities: Skylines **255710**, BeamNG.drive **284160**.
 | Game log | `Cities_Data\output_log.txt` (verify) | `~/.config/unity3d/Colossal Order/Cities_ Skylines/Player.log` (underscore and space, not a colon) |
 | Workshop items | `<library>\steamapps\workshop\content\255710\<item id>\` | same layout |
 
-Inside the game, mods should use `ColossalFramework.IO.DataLocation` (`localApplicationData`, `addonsPath`, `modsPath`, `saveLocation`) instead of these tables. The exporter writes dumps to `<user data>/CsToBeamNG/dumps/<city>_<yyyyMMdd-HHmmss>/` (naming rules in [docs/dump-format.md, Layout](../docs/dump-format.md#layout)), and its Options page shows the folder.
+Inside the game, mods should use `ColossalFramework.IO.DataLocation` (`localApplicationData`, `addonsPath`, `modsPath`, `saveLocation`) instead of these tables. The exporter writes dumps to `<user data>/CsToBeamNG/dumps/<city>_<yyyyMMdd-HHmmss>/` (naming rules in [docs/dump-format.md, Layout](../docs/dump-format.md#layout)), and its Options page shows the folder. Unattended exports exchange their request and status files in `<user data>/CsToBeamNG/autorun/` ([docs/architecture.md, Unattended export](../docs/architecture.md#unattended-export)).
+
+`cstobeamng export` starts the game's native executable directly: `Cities.x64` on Linux, `Cities.exe` on Windows, in the install folder. Steam's own launch configuration starts the Paradox launcher (`dowser`) instead.
 
 ### Build-time locations (MSBuild properties)
 

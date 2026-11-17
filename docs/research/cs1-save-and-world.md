@@ -121,6 +121,48 @@ Prop positions are stored quantised: x and z as short × 0.263671875 m, y as u16
   - Negative zero is written as `0`.
   - The game runs Unity 5.6's older Mono 2.x-based runtime, which is [inferred] no better. The Dump library therefore computes the text of floating-point numbers itself ([dump-format.md, JSON files](../dump-format.md#json-files)).
 
+## Starting the game without the launcher
+
+[verified 2026-11-17 on the native Linux build, Steam build 22724702, unless tagged otherwise]
+
+- **Steam's launch configuration** for app 255710 (the `config/launch` entries in Steam's app info cache, `appcache/appinfo.vdf`) starts `dowser` on Linux and `dowser.exe` on Windows: the Paradox launcher, which waits for the user to click Play. A Windows-only entry for the beta branch `baseline` starts `Cities.exe`. `launcher-settings.json` in the install folder tells the launcher to run `Cities.x64` on Linux.
+- **Steam check.** The game's native plugin (`Cities_Data/Plugins/x86_64/libColossalNative.so`) imports `SteamAPI_InitSafe` and `SteamAPI_RestartAppIfNecessary`. Started directly, with the environment variable `SteamAppId=255710` (Steam sets it for the games it starts; we also set `SteamGameId`) and the Steam client running, the game starts normally: the log shows the Steam ID and the DLC status, and mods load. This worked twice in a row. Started without the variable, Steam would presumably restart the game through its launch configuration, which opens the Paradox launcher [inferred from the Steamworks documentation; untested]. Without a running Steam client, `PlatformServiceBehaviour.Awake` logs "Platform service is not running" and quits [inferred from the IL].
+- **Windows:** the same approach with `Cities.exe` [inferred; untested].
+- **Command-line options.** `Starter.Awake` parses `Environment.GetCommandLineArgs()` with ColossalFramework's `OptionSet` (a copy of Mono.Options, which accepts `-`, `--` and `/` prefixes [inferred]). The options [verified in the IL]:
+
+  | Option | Effect (the game's own description) |
+  |---|---|
+  | `v`, `verboseLog` | verbose log |
+  | `w`, `windowed` | windowed mode |
+  | `b`, `disableInBG` | don't run in the background |
+  | `generateDevConf` | generate a developer configuration file |
+  | `disableMods` | disable mods |
+  | `screen-fullscreen=`, `screen-height=`, `screen-width=` | Unity's screen settings |
+  | `limitfps=<n>` | target frame rate (disables vsync) |
+  | `pdx-launcher-session-token=` | the Paradox launcher's session |
+  | `continuelastsave` | continue the last save |
+  | `noWorkshop` | disable the Steam Workshop |
+  | `refreshWorkshop` | refresh the workshop items' details at startup |
+
+- **`continuelastsave`** sets a flag that the main menu reads when it is shown: if there are saves, it calls its Continue 2.5 s later, which loads the newest save (`SaveHelper.GetLatestSaveGame`, by the saves' `timeStamp`). It can't choose a save, so the exporter loads saves itself (below).
+
+## Loading a save from a mod
+
+[verified 2026-11-17 in the IL of Assembly-CSharp and ColossalManaged, Steam build 22724702, and in game by step 0.6's unattended exports of CityPalma and CItyRockville]
+
+- **When a mod starts.** While loading the plugins in `Starter.Awake`, before the intro and the main menu load, the game's `PluginManager` calls a public instance method `OnEnabled()` on every enabled mod's `IUserMod`, found by reflection (`Public | Instance`); it isn't part of the interface. In game, our `OnEnabled` ran about 1 s after the process started. The game also calls it when the user enables the mod in Content Manager.
+- **When the main menu is ready.** `LoadingManager.LoadIntro` loads the scenes `IntroScreen` and `IntroScreen2` (each replacing the previous scenes), then `MainMenu` additively, then calls the `m_introLoaded` handlers and sets `m_currentlyLoading` to false. So the menu is ready when the scene `MainMenu` is loaded (`SceneManager.GetSceneByName("MainMenu").isLoaded`) and `LoadingManager`'s `m_currentlyLoading` and `m_applicationQuitting` are false. In game, this was the case about 12 s after the start.
+- **Loading a save** the way the main menu's Continue (`MainMenu.ContinueGame`) and the Load panel (`LoadPanel.LoadRoutine`) do:
+  1. List the saves with `PackageManager.FilterAssets(UserAssetType.SaveGameMetaData)`, skipping assets that aren't enabled and demo saves (`PackageHelper.IsDemoModeSave`), as the Load panel does. The Load panel lists each save by its asset's `name`, the package's main asset name, which is normally the file name without `.crp` (`CityPalma`, not the city's name "San Palma").
+  2. Read the save's metadata with `asset.Instantiate<SaveGameMetaData>()`: `cityName`, `timeStamp`, `mapThemeRef`, and `assetRef`, the asset that holds the city data.
+  3. Create a `SimulationMetaData` with `m_CityName` = the city's name and `m_updateMode` = `SimulationManager.UpdateMode.LoadGame` (3). For a save from the Workshop (its package has a valid published file id), set `m_disableAchievements` to `MetaBool.True`. If `mapThemeRef` names a map theme that `PackageManager.FindAssetByName(…, UserAssetType.MapThemeMetaData)` finds, instantiate it as `MapThemeMetaData`, call its `SetSelfRef(asset)`, and set it as `m_MapThemeMetaData`.
+  4. Call `LoadingManager.instance.LoadLevel(assetRef, "Game", "InGame", simulationMetaData, false)`. It returns null and does nothing while the game is loading or quitting; otherwise it sets `m_currentlyLoading` at once and loads in a coroutine.
+  - The Load panel can also override the map theme and the environment; Continue and our loader keep the save's own. The Load panel also records the save's name as the default for the next save (`SavePanel.lastLoadedName`); our loader doesn't, since it never saves.
+  - Before loading, the menu asks whether random disasters should be on if the Natural Disasters DLC is owned and the player hasn't chosen yet (`CheckForDisasterActivation`). Calling `LoadLevel` directly skips the question.
+  - Steam Cloud saves have the package path `cloud:<file>.crp`, not a file-system path. [verified in game]
+  - Loading took about 50 s for CityPalma and 40 s for CItyRockville on the maintainer's machine. Then the loading extensions' `OnLevelLoaded(LoadGame)` fired, as for a manual load.
+- **Quitting:** `LoadingManager.instance.QuitApplication()`, which the main menu's Exit confirmation also calls, unloads the level and quits. It returns null if the game is already quitting. In game the process ended about 10 s later, with the usual shutdown lines in the log.
+
 ## Key APIs
 
 Most names below are verified to exist in the game assemblies. Their use and semantics are [inferred] until an exporter step uses them; upgrade the tags then.
@@ -138,5 +180,5 @@ Most names below are verified to exist in the game assemblies. Their use and sem
 - **Tiles:** `GameAreaManager.instance.m_areaGrid` [verified; see Map tiles].
 - **Mods list:** `ColossalFramework.Plugins.PluginManager` [verified; see Runtime and modding facts].
 - **Game version:** `BuildConfig.applicationVersion` and `applicationVersionFull`, static string properties [verified]: `1.21.1-f9` and `1.21.1-f9-steam-linux` on the maintainer's native Linux install (2026-11-17). Read the properties: the `APPLICATION_VERSION*` fields are constants, which the compiler would copy into a mod at build time.
-- **Loading a save:** `LoadingManager`, `SaveGameMetaData`, `LoadLevel` [verified names].
+- **Loading a save:** `LoadingManager.LoadLevel` with a `SaveGameMetaData` and a `SimulationMetaData` [verified; see Loading a save from a mod]. **Quitting:** `LoadingManager.QuitApplication` [verified].
 - **Randomness:** `ColossalFramework.Math.Randomizer` [verified class], seeded per instance id. Call it in-game instead of reimplementing it.

@@ -12,10 +12,10 @@ namespace CsToBeamNG.Exporter.Export;
 /// button's callback separately, so they share this class's state.
 /// </summary>
 /// <remarks>
-/// Threads (docs/research/cs1-save-and-world.md, Threads): the button and the loading events arrive on
-/// the main thread. The export itself runs as an action on the simulation thread, which the game runs
-/// even while it is paused, such as while Options is open. The outcome goes back to the main thread
-/// through the game's dispatcher, because only the main thread may show UI.
+/// Threads (docs/research/cs1-save-and-world.md, Threads): the button, the loading events and autorun
+/// arrive on the main thread. The export itself runs as an action on the simulation thread, which the
+/// game runs even while it is paused, such as while Options is open. The outcome goes back to the main
+/// thread through the game's dispatcher, because only the main thread may show UI.
 /// </remarks>
 internal static class ExportController
 {
@@ -32,6 +32,9 @@ internal static class ExportController
     /// main thread.
     /// </summary>
     public static string DumpsFolder => DumpLocation.GetDumpsFolder(DataLocation.localApplicationData);
+
+    /// <summary>Whether a city is loaded for playing, so it can be exported. Main thread only.</summary>
+    public static bool IsCityLoaded => _cityLoaded;
 
     /// <summary>Called when a level has loaded. Exports are possible in games, not in the editors.</summary>
     /// <param name="mode">How the level was loaded, for the log.</param>
@@ -58,38 +61,83 @@ internal static class ExportController
     {
         try
         {
-            StartExport();
+            if (!_cityLoaded)
+            {
+                ShowMessage("Load a city first. The exporter works in a running city, not in the main menu or the editors.", isError: false);
+                return;
+            }
+
+            if (IsExportRunning())
+            {
+                ShowMessage("An export is already running. Wait for its message.", isError: false);
+                return;
+            }
+
+            StartExport(outcome => ShowMessage(outcome.Message, !outcome.Succeeded));
         }
         catch (Exception e)
         {
             // Never let an exception reach the game's UI code.
-            lock (_lock)
-            {
-                _activeJob = null;
-            }
-
+            ForgetActiveJob();
             GameLog.Warning("The export couldn't start: " + e);
             ShowMessage("The export couldn't start: " + e.Message + "\n\nDetails are in the game log.", isError: true);
         }
     }
 
-    private static void StartExport()
+    /// <summary>
+    /// Starts an export without UI, for autorun. <paramref name="onFinished"/> receives the outcome on the
+    /// main thread, possibly before this method returns if the export can't start.
+    /// </summary>
+    /// <param name="onFinished">Receives the outcome.</param>
+    public static void StartAutomatedExport(Action<ExportOutcome> onFinished)
     {
+        ExportOutcome? refusal = null;
         if (!_cityLoaded)
         {
-            ShowMessage("Load a city first. The exporter works in a running city, not in the main menu or the editors.", isError: false);
-            return;
+            refusal = new ExportOutcome(false, "No city is loaded, so there is nothing to export.", null);
         }
-
-        lock (_lock)
+        else if (IsExportRunning())
         {
-            if (_activeJob is not null)
+            refusal = new ExportOutcome(false, "Another export is already running.", null);
+        }
+        else
+        {
+            try
             {
-                ShowMessage("An export is already running. Wait for its message.", isError: false);
-                return;
+                StartExport(onFinished);
+            }
+            catch (Exception e)
+            {
+                ForgetActiveJob();
+                GameLog.Warning("The export couldn't start: " + e);
+                refusal = new ExportOutcome(false, "The export couldn't start: " + e.Message, null);
             }
         }
 
+        if (refusal is not null)
+        {
+            onFinished(refusal);
+        }
+    }
+
+    private static bool IsExportRunning()
+    {
+        lock (_lock)
+        {
+            return _activeJob is not null;
+        }
+    }
+
+    private static void ForgetActiveJob()
+    {
+        lock (_lock)
+        {
+            _activeJob = null;
+        }
+    }
+
+    private static void StartExport(Action<ExportOutcome> onFinished)
+    {
         ExportJob job = ExportJob.Prepare(DumpsFolder);
         lock (_lock)
         {
@@ -97,35 +145,54 @@ internal static class ExportController
         }
 
         GameLog.Info("Export requested.");
-        SimulationManager.instance.AddAction(() => RunOnSimulationThread(job));
+        SimulationManager.instance.AddAction(() => RunOnSimulationThread(job, onFinished));
     }
 
-    private static void RunOnSimulationThread(ExportJob job)
+    // Nothing may escape: the simulation thread must survive, and the caller must always get an outcome.
+    private static void RunOnSimulationThread(ExportJob job, Action<ExportOutcome> onFinished)
     {
+        ExportOutcome outcome;
         try
         {
-            ExportOutcome outcome;
-            try
-            {
-                outcome = job.Run();
-            }
-            finally
-            {
-                lock (_lock)
-                {
-                    if (ReferenceEquals(_activeJob, job))
-                    {
-                        _activeJob = null;
-                    }
-                }
-            }
-
-            ThreadHelper.dispatcher.Dispatch(() => ShowMessage(outcome.Message, !outcome.Succeeded));
+            outcome = job.Run();
         }
         catch (Exception e)
         {
-            // Run doesn't throw, so this would be a bug; the simulation thread must survive it.
+            // Run doesn't throw, so this would be a bug.
             GameLog.Warning("The export failed unexpectedly: " + e);
+            outcome = new ExportOutcome(false, "The export failed unexpectedly: " + e.Message, null);
+        }
+        finally
+        {
+            lock (_lock)
+            {
+                if (ReferenceEquals(_activeJob, job))
+                {
+                    _activeJob = null;
+                }
+            }
+        }
+
+        try
+        {
+            ThreadHelper.dispatcher.Dispatch(() => Deliver(onFinished, outcome));
+        }
+        catch (Exception e)
+        {
+            GameLog.Warning("The export's outcome couldn't be passed to the main thread: " + e);
+        }
+    }
+
+    private static void Deliver(Action<ExportOutcome> onFinished, ExportOutcome outcome)
+    {
+        try
+        {
+            onFinished(outcome);
+        }
+        catch (Exception e)
+        {
+            // The dispatcher runs this from the game's main loop, which must not see it.
+            GameLog.Warning("The export's outcome couldn't be delivered: " + e);
         }
     }
 

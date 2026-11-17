@@ -29,17 +29,32 @@ internal sealed class LocationOptions
 
     /// <summary>Offers every location option.</summary>
     public LocationOptions()
-        : this(beamNGUserDirOnly: false)
+        : this(Offer.All)
     {
     }
 
-    private LocationOptions(bool beamNGUserDirOnly)
+    private LocationOptions(Offer offer)
     {
-        _offered = beamNGUserDirOnly ? [_beamNGUserDir] : [_steamDir, _citiesSkylinesDir, _citiesSkylinesUserDir, _beamNGDir, _beamNGUserDir];
+        _offered = offer switch
+        {
+            Offer.BeamNGUserDir => [_beamNGUserDir],
+            Offer.CitiesSkylines => [_steamDir, _citiesSkylinesDir, _citiesSkylinesUserDir],
+            _ => [_steamDir, _citiesSkylinesDir, _citiesSkylinesUserDir, _beamNGDir, _beamNGUserDir],
+        };
+    }
+
+    private enum Offer
+    {
+        All,
+        BeamNGUserDir,
+        CitiesSkylines,
     }
 
     /// <summary>Offers only <c>--beamng-user-dir</c>, for commands that only write into BeamNG.drive's user folder.</summary>
-    public static LocationOptions ForBeamNGUserDir() => new(beamNGUserDirOnly: true);
+    public static LocationOptions ForBeamNGUserDir() => new(Offer.BeamNGUserDir);
+
+    /// <summary>Offers the Steam and Cities: Skylines options, for commands that only use Cities: Skylines.</summary>
+    public static LocationOptions ForCitiesSkylines() => new(Offer.CitiesSkylines);
 
     public void AddTo(Command command)
     {

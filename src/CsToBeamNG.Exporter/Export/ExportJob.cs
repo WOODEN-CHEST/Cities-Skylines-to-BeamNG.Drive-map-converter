@@ -75,7 +75,7 @@ internal sealed class ExportJob
         {
             const string Message = "The city was closed before the export could start. Nothing was exported.";
             GameLog.Warning(Message);
-            return new ExportOutcome(false, Message);
+            return new ExportOutcome(false, Message, null);
         }
 
         DumpWriter? writer = null;
@@ -106,7 +106,7 @@ internal sealed class ExportJob
             _manifest.Complete = true;
             writer.WriteManifest();
             log.Info("Export finished: " + writer.Folder);
-            return new ExportOutcome(true, SuccessMessage(writer.Folder, snapshot));
+            return new ExportOutcome(true, SuccessMessage(writer.Folder, snapshot), writer.Folder);
         }
         catch (Exception e)
         {
@@ -242,6 +242,6 @@ internal sealed class ExportJob
             }
         }
 
-        return new ExportOutcome(false, "The export failed: " + exception.Message + "\n\nDetails are in\n" + where);
+        return new ExportOutcome(false, "The export failed: " + exception.Message + "\n\nDetails are in\n" + where, writer?.Folder);
     }
 }
