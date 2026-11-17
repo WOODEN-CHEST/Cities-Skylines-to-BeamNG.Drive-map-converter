@@ -27,6 +27,10 @@ DecalRoad fields the navgraph reads (verified in `map.lua` unless noted otherwis
 
 Edges without `speedLimit` get an estimate from curvature, one-way status and drivability.
 
+- **Lanes:** with `autoLanes: false`, `lanesLeft` and `lanesRight` (counted looking along the node order) set the lanes; otherwise the game chooses. With `roadRules.rightHandDrive` (traffic on the left) the lane directions are mirrored. [verified: `map.lua`]
+- **Shape:** with `improvedSpline` and the game's default subdivision, the graph follows the decal's subdivided spline: the hello level's road of 10 nodes became 28 graph nodes and 27 links, each node with a radius of half the road width (3.5 m for 7 m), two-way, drivability 1. [verified in game, 2026-11-17, step 0.5]
+- **Driving:** on that invisible road the AI kept to the right-hand lane (mean offset −1.9 m from the centre line, lane centre −1.75 m), stayed on the road and held its 15 m/s limit through the curves. [verified in game]
+
 ## Invisible AI roads
 
 - Official maps mix visible decal roads that carry AI data with invisible ones (`material: road_invisible`) that exist only for the AI. [verified]
@@ -65,4 +69,12 @@ Edges without `speedLimit` get an estimate from curvature, one-way status and dr
 
 - **Enabling:** launch argument `-enablemcp`, or the setting `enableMcp` (off by default).
 - **Endpoint:** Streamable HTTP at `http://127.0.0.1:29292/mcp`. If that port is busy it tries the next ones; `-mcpport <n>` chooses the port. `-mcpremote` binds to all interfaces; don't use it.
-- **Tool modules:** ai, camera, debug, editor, env, fs, input, perf, scene, sim, spawn, system, telemetry, ui, vehicle, world. The most useful tools are listed in `agents/verification.md`.
+- **Protocol:** plain JSON-RPC 2.0 in HTTP POST bodies, answered as `application/json`: `initialize`, `tools/list`, `tools/call`, `ping`. There is no session header, so any HTTP client works, such as `curl -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_levels","arguments":{}}}' http://127.0.0.1:29292/mcp`. [verified: `lua/ge/extensions/mcp/server.lua`, and used throughout step 0.5]
+- **Tool modules:** ai, camera, debug, editor, env, fs, input, perf, scene, sim, spawn, system, telemetry, ui, vehicle, world; 102 tools in 0.40.5. The most useful tools are listed in `agents/verification.md`.
+- **Behaviour worth knowing** [verified in game, step 0.5]:
+  - `load_level` loads the level behind the main menu, which stays on screen until `set_ui_state` with route `play`; `toggle_ui` with `show: false` hides the remaining UI.
+  - `screenshot_image` and `get_ai` are asynchronous: call again until the result arrives.
+  - `get_logs` returns the log's tail on the first call, then only new lines, but at most 12 KiB per call, cut mid-line. For complete logs read `<user folder>/beamng.log`, which the game writes with a delay of up to minutes.
+  - `set_free_camera` rotations: the identity looks along +Y; `{x: 0.7071, w: 0.7071}` looks straight down, and `{z: s, w: c}` with positive s turns the view towards +X. Both are the opposite sign of the right-hand rule.
+  - `drive_to` aims at the first node of the road segment nearest to the given position, which isn't always the nearest node.
+  - `raycast` with `renderGeometry: false` hits collision geometry; its result has no material name. `get_ground_at_point` measures down from the given point, so start above the ground.

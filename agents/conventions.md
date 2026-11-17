@@ -54,12 +54,14 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
 ## Cross-platform rules
 
 - **File-system paths:** build them with `Path.Combine` or `Path.Join`; never concatenate separators. Don't assume a case-insensitive file system.
-- **BeamNG virtual paths** inside level files always use `/` and start at the virtual root (`/levels/<level>/...`). Build them with the dedicated helper, never with `Path.Combine`.
-- **Generated names:** file and folder names are lowercase ASCII (`a-z0-9_-.`), and references must match them exactly, because Linux is case-sensitive.
+- **BeamNG virtual paths** inside level files always use `/` and start at the virtual root (`/levels/<level>/...`). Build them with `VirtualPath` (`src/CsToBeamNG.Converter/BeamNG/`), never with `Path.Combine`; `ToFileSystemPath` maps one into a mod folder.
+- **Generated names:** file and folder names are lowercase ASCII (`a-z0-9_-.`), and references must match them exactly, because Linux is case-sensitive (`BeamNGNames.IsGeneratedName`).
+  - The exception is the scene tree: group folders carry the group's name, and the game expects some names with capitals, such as `MissionGroup` and `PlayerDropPoints` (`BeamNGNames.IsSceneName`). The writer creates both the name and the folder, so they always match.
 - **Culture:** format and parse every number and date with `CultureInfo.InvariantCulture`.
   - Many machines, including the maintainer's (`LC_NUMERIC` is a decimal-comma locale), use decimal commas, which would corrupt JSON and other text formats.
   - Tests that write numbers must also run once under a decimal-comma culture.
 - **Text output:** UTF-8 without BOM, `\n` line endings.
+- **BeamNG files** are written by the writers in `src/CsToBeamNG.Converter/BeamNG/`, which return `OutputFile`s for `ModInstaller` to install. JSON goes through `BeamNGJson` (System.Text.Json): invariant, coordinates as `float`s in their shortest form, `-0` as `0`. The dump's `JsonWriter` is for the dump only.
 - **Windows-only APIs** (such as the registry) go behind `OperatingSystem.IsWindows()`, with a Linux equivalent provided.
 - **Game locations:** never assume them. Go through `GameEnvironmentLocator` (`src/CsToBeamNG.Converter/Discovery/`), which applies the user's overrides. New knowledge about where games keep files goes in [docs/research/game-locations.md](../docs/research/game-locations.md).
 
@@ -70,7 +72,8 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
 - Binary formats are little-endian, with explicit versioned headers, and are documented in `docs/dump-format.md`.
 - Output is deterministic, which keeps diffs and golden tests meaningful:
   - stable ordering;
-  - no timestamps or random GUIDs in generated files (derive BeamNG `persistentId`s from stable keys);
+  - no timestamps or random GUIDs in generated files (BeamNG `persistentId`s come from `PersistentId.ForObject(level, key)`, with keys derived from the input, such as a CS1 object id);
+  - for output that must match across platforms, avoid `Math.Sin`, `Math.Exp` and similar in generated values: .NET takes them from each platform's C library, whose last bits can differ. Arithmetic and `Math.Sqrt` are exact everywhere (`HelloLevel` and `RotationMatrix.YawTowards` work this way);
   - parallel work merged in a fixed order.
 
 ## Errors, logging, diagnostics

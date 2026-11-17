@@ -43,7 +43,9 @@ Rationale, conversion stages and the decision log are in [docs/architecture.md](
 | `agents/` | agent guidance: this file, conventions, verification, environment | yes |
 | `agents/local/` | current development plan, step files, progress, scratch | **no** (gitignored) |
 
-Shared build settings are in `Directory.Build.props`/`.targets`, package versions in `Directory.Packages.props`, code style in `.editorconfig`, the SDK pin in `global.json` and CI in `.github/workflows/ci.yml`.
+Shared build settings are in `Directory.Build.props`/`.targets`, package versions in `Directory.Packages.props`, code style in `.editorconfig`, the SDK pin in `global.json`, CI in `.github/workflows/ci.yml`, and the registration of BeamNG.drive's MCP server in `.mcp.json`.
+
+In the converter, everything that knows BeamNG's formats lives in `src/CsToBeamNG.Converter/BeamNG/`: virtual paths, the scene tree, terrain, meshes, materials, `info.json` and the installer. `Development/` holds test levels such as the one `dev hello-level` installs.
 
 ## Build, run, test
 
@@ -56,6 +58,7 @@ dotnet test --project tests/CsToBeamNG.Dump.Tests   # one test project
 dotnet format --verify-no-changes                   # style check; plain `dotnet format` fixes most issues
 dotnet run --project src/CsToBeamNG.Cli -- --help   # the CLI
 dotnet run --project src/CsToBeamNG.Cli -- doctor   # where the games and their folders are on this machine
+dotnet run --project src/CsToBeamNG.Cli -- dev hello-level   # installs a generated test level into BeamNG.drive
 ```
 
 - Warnings are errors, including code style (`.editorconfig`) and analyzers.
@@ -69,7 +72,7 @@ dotnet run --project src/CsToBeamNG.Cli -- doctor   # where the games and their 
   - **Allowed:** read-only commands such as `git status`, `git diff`, `git log`, `git show`, `git blame`, `git grep`, `git ls-files` and `git check-ignore`. Use `git --no-pager` so output doesn't block on a pager.
   - **Forbidden:** `add`, `commit`, `stash`, `checkout`/`switch`, `restore`, `reset`, `rm`, `mv`, `clean`, `merge`, `rebase`, `cherry-pick`, `revert`, `pull`, `push`, `fetch`, `tag`, `apply`/`am`, `config` writes, and creating, deleting or renaming branches.
   - End your task with a suggested commit message; it is only a starting point for the maintainer.
-- **Never edit game installation folders.** BeamNG test content goes into the BeamNG user folder under `mods/unpacked/`, and only into folders named `cstobeamng_*`; other mods there belong to the user. The exporter is deployed to the CS1 user-data `Addons/Mods/` folder.
+- **Never edit game installation folders.** BeamNG test content goes into the BeamNG user folder under `mods/unpacked/`, and only into folders named `cstobeamng_*`; other mods there belong to the user. Install through `ModInstaller`, which replaces only the files listed in the folder's `cstobeamng-files.json`. The exporter is deployed to the CS1 user-data `Addons/Mods/` folder.
 - **Never put game material in the repository:** game DLLs, assets (meshes, textures, shaders, audio), savegames, city dumps, generated levels or decompiled game code. Record facts learned from them in `docs/research/`, in your own words, with sources.
 - **Stay in scope.** Do the task you were given; record follow-ups instead of silently widening it.
 - **Ask the user first** before adding a dependency with a non-permissive license, choosing a license, adding MCP servers or other tool configuration, or deleting anything outside the repository. Also ask whenever a game must be run, and tell them exactly what to do.
@@ -91,7 +94,7 @@ The procedures are in [agents/verification.md](verification.md).
 
 - Always build and run the tests.
 - CS1-side changes need the user to run the game; ask precisely.
-- BeamNG-side changes can be verified by the agent through BeamNG's built-in MCP server: load the level, take screenshots, read logs, inspect the AI navgraph, measure performance.
+- BeamNG-side changes can be verified by the agent through BeamNG's built-in MCP server (registered in `.mcp.json`; the user starts the game with `-enablemcp`): load the level, take screenshots, read logs, inspect the AI navgraph, measure performance.
 
 ## Knowledge base
 

@@ -1,3 +1,4 @@
+using System;
 using System.CommandLine;
 using CsToBeamNG.Converter.Discovery;
 
@@ -24,13 +25,28 @@ internal sealed class LocationOptions
     private readonly Option<string?> _beamNGUserDir = Create(
         "--beamng-user-dir", "BeamNG.drive user folder (normally the one named current).", DiscoveryOverrides.BeamNGUserDirVariable);
 
+    private readonly Option<string?>[] _offered;
+
+    /// <summary>Offers every location option.</summary>
+    public LocationOptions()
+        : this(beamNGUserDirOnly: false)
+    {
+    }
+
+    private LocationOptions(bool beamNGUserDirOnly)
+    {
+        _offered = beamNGUserDirOnly ? [_beamNGUserDir] : [_steamDir, _citiesSkylinesDir, _citiesSkylinesUserDir, _beamNGDir, _beamNGUserDir];
+    }
+
+    /// <summary>Offers only <c>--beamng-user-dir</c>, for commands that only write into BeamNG.drive's user folder.</summary>
+    public static LocationOptions ForBeamNGUserDir() => new(beamNGUserDirOnly: true);
+
     public void AddTo(Command command)
     {
-        command.Options.Add(_steamDir);
-        command.Options.Add(_citiesSkylinesDir);
-        command.Options.Add(_citiesSkylinesUserDir);
-        command.Options.Add(_beamNGDir);
-        command.Options.Add(_beamNGUserDir);
+        foreach (Option<string?> option in _offered)
+        {
+            command.Options.Add(option);
+        }
     }
 
     public DiscoveryOverrides GetOverrides(ParseResult parseResult) => new()
@@ -48,6 +64,8 @@ internal sealed class LocationOptions
         HelpName = "dir",
     };
 
-    private static PathOverride? Read(ParseResult parseResult, Option<string?> option) =>
-        parseResult.GetValue(option) is { Length: > 0 } value ? new PathOverride(value, option.Name) : null;
+    private PathOverride? Read(ParseResult parseResult, Option<string?> option) =>
+        Array.IndexOf(_offered, option) >= 0 && parseResult.GetValue(option) is { Length: > 0 } value
+            ? new PathOverride(value, option.Name)
+            : null;
 }

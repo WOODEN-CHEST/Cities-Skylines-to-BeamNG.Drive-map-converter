@@ -23,4 +23,21 @@ public sealed class LocationOptionsTests
         Assert.Null(overrides.CitiesSkylinesUserDir);
         Assert.Null(overrides.BeamNGDir);
     }
+
+    [Fact]
+    public void CanOfferOnlyTheBeamNGUserFolder()
+    {
+        LocationOptions options = LocationOptions.ForBeamNGUserDir();
+        var command = new Command("test");
+        options.AddTo(command);
+
+        ParseResult result = command.Parse(["--beamng-user-dir", "/games/current"]);
+        DiscoveryOverrides overrides = options.GetOverrides(result);
+
+        Assert.Single(command.Options);
+        Assert.Empty(result.Errors);
+        Assert.Equal(new PathOverride("/games/current", "--beamng-user-dir"), overrides.BeamNGUserDir);
+        Assert.Null(overrides.CitiesSkylinesDir);
+        Assert.NotEmpty(command.Parse(["--cs1-dir", "/games/cs1"]).Errors);
+    }
 }

@@ -28,8 +28,10 @@ BeamNG.drive 0.40 and later have a built-in MCP server.
 
 **Setup** (once per session):
 
-- The user starts BeamNG with the `-enablemcp` argument (Steam → BeamNG.drive → Properties → Launch options) or enables the `enableMcp` setting. The server listens on `http://127.0.0.1:29292/mcp`, or the next free port if that one is busy; `-mcpport <n>` chooses the port.
-- The project registers the server as `beamng` in `.mcp.json`; step 0.5 adds this with the user's approval. Claude Code asks the user to approve the server once.
+- The user starts BeamNG with the `-enablemcp` argument (Steam → BeamNG.drive → Properties → General → Launch options) or enables the `enableMcp` setting. The server listens on `http://127.0.0.1:29292/mcp`, or the next free port if that one is busy; `-mcpport <n>` chooses the port. It answers only while the game runs.
+- `.mcp.json` at the repository root registers the server as `beamng`. Claude Code asks the user to approve it once; the tools then appear in sessions started after the approval, as `mcp__beamng__<tool>`.
+- **Without the tools in the session** (another agent, or a session started before the approval), call the server directly: it speaks plain JSON-RPC over HTTP POST, with no session handshake, so `curl` or a few lines of Python suffice (example in [docs/research/beamng-ai-and-traffic.md](../docs/research/beamng-ai-and-traffic.md#mcp-server-beamng-040)). Step 0.5 worked this way; its helper scripts (call a tool, take a screenshot, reload a level and wait for it) are in `agents/local/scratch/0.5/tools/` when that folder exists.
+- Install the level first (`cstobeamng dev hello-level`, or the converter's install step), then let the user start the game, so the level list contains it.
 
 **Useful tools** (names as of 0.40.5):
 
@@ -46,12 +48,14 @@ BeamNG.drive 0.40 and later have a built-in MCP server.
 
 **Standard checks** for a generated level:
 
-1. **Loads cleanly:** `load_level`, then `get_logs`. There should be no errors or warnings that mention our files.
-2. **Looks right:** screenshots from defined camera poses, an overview from above and views at ground level. Save the images under `agents/local/scratch/<step>/` when that folder exists, and refer to them in the report.
-3. **Geometry is right:** compare `get_ground_at_point` or `raycast` heights with the dump at sample points.
-4. **Drivable:** spawn a vehicle on a road and let the AI drive a route (`drive_to`) across the area. Watch for falling through surfaces, getting stuck and bumps at junctions.
+1. **Loads cleanly:** call `get_logs` once to set a baseline, then `load_level`, wait for the log line `Level loaded in`, and call `get_logs` again. It returns at most 12 KiB per call, so for a complete record also read the session from `beamng.log` in the user folder. There should be no errors or warnings that mention our files. Known harmless lines: the UI's "Failed to update minimap draw transform" (no minimap data yet), a missing level-specific licence plate, and `gameplay_achievement` errors.
+2. **Looks right:** first `set_ui_state` with route `play` and `toggle_ui` with `show: false`, or the main menu covers the view. Then screenshots from defined camera poses, an overview from above and views at ground level. `set_free_camera` with rotation `{x: 0.7071, y: 0, z: 0, w: 0.7071}` looks straight down; check a pose with `run_lua` and `core_camera.getForward()`. Save the images under `agents/local/scratch/<step>/` when that folder exists, and refer to them in the report.
+3. **Geometry is right:** compare `get_ground_at_point` or `raycast` heights with the dump at sample points. Asymmetric test features catch mirrored or transposed data.
+4. **Drivable:** spawn a vehicle on a road and let the AI drive a route (`drive_to`) across the area, polling the vehicle's position with `run_lua`. Watch for falling through surfaces, getting stuck and bumps at junctions.
 5. **AI network sane:** `get_navgraph` counts are plausible, the AI reaches its targets, and traffic doesn't jam at junctions.
 6. **Performance:** FPS and VRAM via `get_performance_metrics` and `get_vram_usage`. The maintainer's GPU has 6 GB of VRAM; note any regressions.
+
+A level can be reinstalled while the game runs; the game reloads changed files, and `load_level` again gives a clean state.
 
 Without MCP, ask the user for screenshots and the BeamNG log (`<BeamNG user folder>/beamng.log`).
 
