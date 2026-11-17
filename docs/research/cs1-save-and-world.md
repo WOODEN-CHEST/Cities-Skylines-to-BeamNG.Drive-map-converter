@@ -67,6 +67,12 @@ Prop positions are stored quantised: x and z as short × 0.263671875 m, y as u16
   - Linux: `~/.config/unity3d/Colossal Order/Cities_ Skylines/Player.log`. The folder name has an underscore where the product name has a colon, because Unity replaces the `:`. [verified 2026-11-16 on the native Linux build: the log is there and starts with the game's Mono loading lines.] The previously recorded `.../Cities: Skylines/Player.log` (from [CSM developer resources](https://github.com/CitiesSkylinesMultiplayer/CSM/wiki/Developer-Resources)) does not exist.
   - Windows: `Cities_Data/output_log.txt` [inferred from Unity 5.x conventions; verify].
 - **Native Linux stability:** some reports say mods are less stable on the native Linux build than under Proton. These are anecdotal. [community: ProtonDB]
+- **Runtime assemblies:** `Cities_Data/Managed/` has `mscorlib` 2.0.0.0, `System` 2.0.0.0 and `System.Core` 3.5.0.0, matching the .NET 3.5 reference assemblies that mods compile against. [verified 2026-11-17 with monodis]
+- **Floating-point text on Mono is unreliable.** The round-trip format `R` can produce text that a correctly rounding parser reads as the neighbouring value. [verified 2026-11-17 on Mono 6.8.0, running the net35 build of CsToBeamNG.Dump]
+  - 11 of 20,000 random doubles were written with 15 significant digits where 17 are needed, such as `-5.08788337932957E-20`, each 1 ulp off.
+  - Mono's own `double.Parse` reads that text back as the original value, so formatting with `R` and checking by parsing back on the same runtime passes.
+  - Negative zero is written as `0`.
+  - The game runs Unity 5.6's older Mono 2.x-based runtime, which is [inferred] no better. The Dump library therefore computes the text of floating-point numbers itself ([dump-format.md, JSON files](../dump-format.md#json-files)).
 
 ## Key APIs
 

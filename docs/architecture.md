@@ -33,7 +33,7 @@ BeamNG level in the user's BeamNG user folder (mods/unpacked/<mod>/levels/<level
 
 - A versioned folder: `manifest.json`, binary arrays for large data, JSON for structured data, and image/mesh files for assets.
 - Coordinates and units are game-native.
-- Specified in `dump-format.md` (planned).
+- Specified in [dump-format.md](dump-format.md). The format and each section have their own `major.minor` version, so a breaking change in one section only makes readers skip that section.
 
 Why an intermediate format: exporting requires starting the game and loading the city, which takes minutes. Converting should take seconds, so it can be iterated on: dump once, convert many times.
 
@@ -113,3 +113,6 @@ The inputs depend on reverse-engineered game internals and on whatever mods and 
 | D10 | 2026-11-16 | System.CommandLine 2.0.x for the CLI | Microsoft's command-line parser (MIT). The 2.0 line is the one serviced alongside .NET 10 LTS. |
 | D11 | 2026-11-16 | xUnit.net v3 on Microsoft Testing Platform; `global.json` puts `dotnet test` in MTP mode | xUnit 4 defaults to MTP v2, which the .NET 10 SDK no longer runs through VSTest mode. It also needs fewer packages. |
 | D12 | 2026-11-16 | net35 builds keep nullable analysis, with internal polyfills of the flow-analysis attributes (`src/Shared/`) | Disabling nullable for net35 would leave the exporter, which is net35 only, unchecked. |
+| D13 | 2026-11-17 | Dump container: `manifest.json` plus one folder per section; binary record files with a 64-byte `CSBD` header whose record count is written last; a JSON string table per section; a `major.minor` version for the format and for each section, readable within a major version | Sections evolve independently, and a breaking change in one only makes readers skip it. The count written last marks interrupted files. Readers advance by the header's record size, so minor versions can append fields. |
+| D14 | 2026-11-17 | All format code, including the .NET 10 readers that use System.Text.Json, lives in `CsToBeamNG.Dump`; the converter only interprets the data | The writer, the reader and each section's layout stay in one place, shared by the exporter and the converter, so they can't drift apart. |
+| D15 | 2026-11-17 | The JSON writer computes the text of floating-point numbers itself (Burger and Dybvig's algorithm, exact integer arithmetic) instead of using the runtime's `ToString("R")` | On Mono, `R` formatting and parsing agree with each other but not with correct parsers (verified on Mono 6.8), so a write-and-check approach can't catch the error. Integer arithmetic gives the same text on every runtime, and tests compare it with .NET 10. |

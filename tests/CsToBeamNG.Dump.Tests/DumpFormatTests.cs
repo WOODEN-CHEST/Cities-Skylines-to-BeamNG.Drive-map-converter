@@ -9,4 +9,11 @@ public sealed class DumpFormatTests
     {
         Assert.Equal(0, DumpFormat.MajorVersion);
     }
+
+    // A change of the format version must come with a changelog entry in docs/dump-format.md.
+    [Fact]
+    public void CurrentVersionIsTheOneInTheSpecification()
+    {
+        Assert.Equal("0.1", DumpFormat.CurrentVersion.ToString());
+    }
 }

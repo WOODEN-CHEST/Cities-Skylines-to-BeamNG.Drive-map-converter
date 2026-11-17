@@ -98,7 +98,7 @@ The procedures are in [agents/verification.md](verification.md).
 - [docs/architecture.md](../docs/architecture.md): design, conversion stages, decision log.
 - [docs/research/](../docs/research/README.md): CS1 internals and BeamNG formats, with sources and confidence tags. **Read the relevant file before touching game-specific code.**
 - [docs/legal.md](../docs/legal.md): what may be committed and how outputs may be used.
-- `docs/dump-format.md`: the dump specification (created in step 0.3).
+- [docs/dump-format.md](../docs/dump-format.md): the dump specification. Every section an export step adds is specified there.
 - [agents/environment.md](environment.md): where games, user folders and logs live on each OS.
 
 ## Current development plan (local only)

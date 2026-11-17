@@ -33,11 +33,15 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
 
 - **Not available:**
   - `Task`/`async`, `ValueTuple`/`Tuple`, `Span<T>`, `Lazy<T>`
-  - `string.IsNullOrWhiteSpace`, `Enum.HasFlag`, `Stream.CopyTo`, `StringBuilder.Clear`
-  - `Path.Combine` with more than two arguments
+  - `IReadOnlyList<T>` and the other `IReadOnly*` interfaces (use `IList<T>` or arrays in shared APIs), `Array.Empty<T>()`
+  - `string.IsNullOrWhiteSpace`, `Enum.HasFlag`, `Stream.CopyTo`, `StringBuilder.Clear`, `BitConverter.SingleToInt32Bits`
+  - `Path.Combine` with more than two arguments, `File.Move` onto an existing file
+- **Don't trust the runtime's floating-point text.** Mono's `double.ToString("R")` and `double.Parse` can both be off by one unit in the last place, in ways that agree with each other (verified on Mono 6.8). Write JSON only with the Dump library's `JsonWriter`, which computes the digits exactly, and binary data with `RecordFileWriter`. Never format numbers for the dump by hand.
 - **Avoid language features that need runtime or library support:** default interface members, `ref struct`, records and `init` (they would need an `IsExternalInit` polyfill; check in the game before relying on them).
 - **Nullable analysis is on for net35 too.** The compiler generates the attributes it needs. The flow-analysis attributes (`NotNullWhen`, `MemberNotNull`, ...) come from internal polyfills in `src/Shared/NullableAttributes.cs`, which every net35 project compiles in. Never expose them to another net35 assembly through `InternalsVisibleTo`: the copies would conflict (CS0436).
-- **Code compiled for both targets (Dump):** the analyzers also check the net10.0 build, where they suggest APIs that net35 lacks; for example, CA1510 asks for `ArgumentNullException.ThrowIfNull`. Use `#if NET` for such calls, or a small helper in Dump; don't disable the rule.
+- **Code compiled for both targets (Dump):** the analyzers also check the net10.0 build, where they suggest APIs that net35 lacks; for example, CA1510 asks for `ArgumentNullException.ThrowIfNull`. Use `#if NET` for such calls, or a small helper in Dump (`Guard` has the common checks); don't disable the rule.
+  - Code that only the converter needs, such as the readers built on System.Text.Json, may use the whole .NET 10 library. Wrap such a file's entire content in `#if NET` ... `#endif`, so it is plainly absent from the net35 build.
+  - Records and `init` are fine in those net10-only files.
 - **Threads:** call Unity APIs only on the main thread. Read simulation data consistently: on the simulation thread (`SimulationManager.AddAction`), or justify any other approach in a comment.
 - **Never modify game state.** The exporter only reads. Don't pause the simulation, change settings, or write into managers.
 - **One bad object must not abort an export.** Catch per object, log its id and prefab name, count the failures, and report them in the manifest.
