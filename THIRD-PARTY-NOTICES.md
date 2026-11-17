@@ -15,6 +15,8 @@ Every dependency must be listed here, with its license and purpose (see `agents/
 | [Microsoft.Testing.Platform](https://github.com/microsoft/testfx) (with `.MSBuild`, `Extensions.Telemetry`, `Extensions.TrxReport.Abstractions`) | 2.5.2 | MIT | test projects | Test runner (dependency of xunit.v3) | no (tests only) |
 | Microsoft.ApplicationInsights, Microsoft.Bcl.AsyncInterfaces, Microsoft.Win32.Registry, System.Security.AccessControl | various | MIT | test projects | Dependencies of the test platform | no (tests only) |
 
+PNG images, such as the debug renders of `cstobeamng inspect`, are written by the converter's own code (`src/CsToBeamNG.Converter/Imaging/`), which implements the W3C PNG specification and compresses with .NET's built-in `System.IO.Compression`. No package is involved.
+
 ## Game assemblies
 
 The exporter compiles against assemblies of the user's own Cities: Skylines installation (`Assembly-CSharp`, `ColossalManaged`, `ICities`, `UnityEngine`). They are not part of this repository and are never copied or redistributed; see [docs/legal.md](docs/legal.md).

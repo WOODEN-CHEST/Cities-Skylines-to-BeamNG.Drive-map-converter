@@ -10,6 +10,7 @@ The reference implementation is `src/CsToBeamNG.Dump/` ([Implementation](#implem
 <dump folder>/
 ├── manifest.json        what the dump contains (required)
 ├── export.log           the exporter's log (diagnostic, not part of the format)
+├── probes/              developer probes, only when requested (not part of the format)
 └── <section name>/      one folder per section
     └── ...              the section's files, named by its specification
 ```
@@ -20,6 +21,7 @@ The reference implementation is `src/CsToBeamNG.Dump/` ([Implementation](#implem
   - If that folder exists, `-2`, `-3` and so on are appended.
   - `DumpLocation` in the Dump library implements these rules.
 - Only the files listed in the manifest belong to the dump. Readers ignore everything else, such as the log or a leftover `manifest.json.tmp`.
+- `probes/` holds developer probes, one folder per probe, written only when requested (`cstobeamng export <save> --probe <name>`; `DumpProbes` in the Dump library). They are research data with their own formats, documented with the code that reads them; the geometry probe is described in [research/cs1-networks.md](research/cs1-networks.md#validation). The name `probes` is therefore not a valid section name.
 - A section's files are in the folder named after the section, and may be in subfolders of it.
 - A section exists only once it is complete: writers add it to the manifest after its last file is closed. A section whose export failed is simply absent.
 
@@ -307,14 +309,146 @@ The writer computes the text of floating-point numbers itself, with exact intege
 
 ## Sections
 
-Format 0.1 defines no sections yet. Steps 1.2 to 1.4 add terrain, water, networks, buildings, props and trees.
+| Section | Version | Content | Since |
+|---|---|---|---|
+| [`terrain`](#terrain-01) | 0.1 | Terrain heights: raw and final on the 16 m grid, 4 m detail heights of some tiles | step 1.2 |
+| [`water`](#water-01) | 0.1 | Sea level, the water simulation's cells, water sources | step 1.2 |
+
+Steps 1.3 and 1.4 add networks, buildings, props and trees.
 
 To add a section:
 
 1. Choose its name ([Names](#names)). Its first version is 0.1.
 2. Specify it below, following the template.
-3. Define its record layouts and file names once, in `CsToBeamNG.Dump`, where both the exporter's writer and the converter's loader use them.
+3. Define its record layouts and file names once, in `CsToBeamNG.Dump`, where both the exporter's writer and the converter's loader use them: in `Sections/`, a static class with the names and sizes, a content class, a writer (both targets) and a reader (.NET 10), as for [`terrain`](#terrain-01).
 4. Add an entry to the [changelog](#changelog).
+
+### Grids
+
+Sections that sample the map on a regular grid describe it with a grid object in their JSON file:
+
+```json
+{
+  "originX": -8640,
+  "originZ": -8640,
+  "spacing": 16,
+  "resolution": 1081
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `originX`, `originZ` | number | The world X and Z of point (0, 0), in metres. |
+| `spacing` | number | The distance between neighbouring points, in metres, more than 0. |
+| `resolution` | integer | The number of points along each side, 2 to 32,768. |
+
+Point (i, j) lies at X = `originX` + `spacing` · i and Z = `originZ` + `spacing` · j, so i grows towards +X (east) and j towards +Z (north). Grid files store one record per point, row by row: point (i, j) is record j · `resolution` + i. Readers take the geometry from the file rather than assuming the game's: a grid whose files don't hold `resolution`² records is damaged.
+
+### `terrain` (0.1)
+
+The terrain's heights as the game stores them, written by the exporter since step 1.2 ([research: Terrain](research/cs1-save-and-world.md#terrain)):
+
+- the **raw heights**: the terrain as the map and the landscaping tools shaped it (`TerrainManager.RawHeights`);
+- the **final heights**: the raw heights after roads and buildings have levelled the ground (`FinalHeights`). Where a tile has no detail heights, they are the ground the game draws;
+- the **detail heights**: the same levelled ground on a 4 m grid, which the game keeps only for some tiles (the unlocked ones) and draws there instead of the final heights.
+
+| File | Content |
+|---|---|
+| `terrain.json` | the grids and the tiles that have detail heights |
+| `raw-heights.bin` | records of type `terrainHeight`: the raw heights, one per point of `grid` |
+| `final-heights.bin` | records of type `terrainHeight`: the final heights, one per point of `grid` |
+| `detail-heights.bin` | records of type `terrainHeight`: the detail heights of the tiles listed in `detail.tiles`, tile after tile in that order, each `detail.tileResolution`² points row by row |
+
+`recordCount`: not used.
+
+`terrain.json`:
+
+```json
+{
+  "grid": { "originX": -8640, "originZ": -8640, "spacing": 16, "resolution": 1081 },
+  "detail": {
+    "grid": { "originX": -8640, "originZ": -8640, "spacing": 4, "resolution": 4321 },
+    "tileResolution": 481,
+    "tiles": [ { "x": 4, "z": 3 }, { "x": 3, "z": 4 }, { "x": 4, "z": 4 } ]
+  }
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `grid` | [grid](#grids) | Where the raw and final heights lie. The game's: 1081 × 1081 points, 16 m apart, covering the whole map. |
+| `detail.grid` | [grid](#grids) | The lattice that all detail heights lie on. It spans the whole map (the game's: 4321 × 4321 points, 4 m apart), but only the listed tiles have heights. |
+| `detail.tileResolution` | integer | The number of detail points along each side of a tile, its edges included (the game's: 481). Neighbouring tiles share their edge points, so 9 · (`tileResolution` − 1) + 1 = `detail.grid.resolution`; readers reject other values. |
+| `detail.tiles` | array of objects | The map tiles that have detail heights, each with `x` and `z` (0 to 8, as in [`city`](#city)), ordered by z, then x, each listed once. Empty if no tile has them. |
+
+Tile (x, z) holds the detail points i = (`tileResolution` − 1) · x to (`tileResolution` − 1) · (x + 1), and j likewise; its block in `detail-heights.bin` starts at its −X, −Z corner.
+
+Record type `terrainHeight`, 2 bytes:
+
+| Offset | Type | Field | Unit | Meaning |
+|---|---|---|---|---|
+| 0 | u16 | `height` | 1/64 m | The height above the game's zero, 0 to 1023.98 m. |
+
+The game draws, and places objects on, the detail heights where a tile has them and the final heights elsewhere; between points it interpolates bilinearly. On a detail tile's −X or −Z edge next to a tile without detail heights it uses the final heights, and a point on the line between two tiles belongs to the tile on its +X or +Z side. [Research: Terrain](research/cs1-save-and-world.md#terrain) has the details; `CityTerrain.SampleGround` in the converter implements them.
+
+### `water` (0.1)
+
+The water as the game simulates it, written by the exporter since step 1.2 ([research: Water](research/cs1-save-and-world.md#water)): the sea level, one cell per point of the 16 m terrain grid with its water depth, and the water sources.
+
+| File | Content |
+|---|---|
+| `water.json` | the sea level and the cells' grid |
+| `cells.bin` | records of type `waterCell`, one per point of `grid`, row by row |
+| `sources.bin` | records of type `waterSource`, ordered by id |
+
+`recordCount`: the number of water sources.
+
+`water.json`:
+
+```json
+{
+  "seaLevel": 59.999004,
+  "grid": { "originX": -8640, "originZ": -8640, "spacing": 16, "resolution": 1081 }
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `seaLevel` | number (32-bit) | The sea level in metres: the water level the simulation keeps at the map's edges (`WaterSimulation.m_currentSeaLevel`). |
+| `grid` | [grid](#grids) | Where the cells lie; the game's is the terrain's 16 m grid. |
+
+Record type `waterCell`, 10 bytes:
+
+| Offset | Type | Field | Unit | Meaning |
+|---|---|---|---|---|
+| 0 | u16 | `ground` | 1/64 m | The bottom the water simulation fills: the terrain's final heights with buildings raised as obstacles and some areas dug out (the game's block heights). It differs from the ground the game draws. |
+| 2 | u16 | `depth` | 1/64 m | The water above `ground`; 0 where the cell is dry. The water surface is `ground` + `depth`. |
+| 4 | u16 | `pollution` | game units | The water's pollution, as the game stores it. |
+| 6 | i16 | `velocityX` | game units | The flow along X, as the game stores it. |
+| 8 | i16 | `velocityZ` | game units | The flow along Z, as the game stores it. |
+
+The game draws water about 0.31 m below `ground` + `depth`, smoothed over neighbouring cells, so it shows only where `depth` is larger than that ([research: Water](research/cs1-save-and-world.md#water)).
+
+Record type `waterSource`, 52 bytes:
+
+| Offset | Type | Field | Unit | Meaning |
+|---|---|---|---|---|
+| 0 | u32 | `id` | | The game's id of the source: its index in the game's list, plus 1. |
+| 4 | u16 | `type` | | 1: natural (placed with the map editor); 2: a building's (a water pumping station's intake, a sewage outlet); 3: a water treatment plant's. Readers keep other values as unknown. |
+| 6 | u16 | `target` | 1/64 m | The water surface height the source works towards: a natural source lets water out until the surface around its outlet reaches it. |
+| 8 | f32 | `inputX` | m | Where the source takes water in. |
+| 12 | f32 | `inputY` | m | |
+| 16 | f32 | `inputZ` | m | |
+| 20 | f32 | `outputX` | m | Where the source lets water out. |
+| 24 | f32 | `outputY` | m | |
+| 28 | f32 | `outputZ` | m | |
+| 32 | u32 | `water` | game units | The water the source holds. |
+| 36 | u32 | `pollution` | game units | The pollution the source holds. |
+| 40 | u32 | `inputRate` | game units | How fast it takes water in. |
+| 44 | u32 | `outputRate` | game units | How fast it lets water out. |
+| 48 | u32 | `flow` | game units | The water it let out in the simulation's last step. |
+
+Readers skip, with a warning, a source whose position isn't finite.
 
 ### Template: `<name>` (0.1)
 
@@ -353,13 +487,15 @@ It is UTF-8 text with one line per message: the UTC time to the millisecond, the
 | String tables | `StringTableBuilder`; `StringTable` (.NET 10) | `CsToBeamNG.Dump` |
 | JSON | `JsonWriter` | `CsToBeamNG.Dump.Json` |
 | Versions and errors | `DumpFormat`, `DumpVersion`, `DumpException` | `CsToBeamNG.Dump` |
+| Sections | per section: `TerrainSection` (names and sizes), `TerrainSectionContent`, `TerrainSectionWriter`, `TerrainSectionReader` (.NET 10); the same for `Water…`; `GridGeometry` | `CsToBeamNG.Dump.Sections` |
 
 Readers report a dump they can't read with a `DumpException` whose `Kind` says why: `NotFound`, `Corrupt`, `Incompatible` or `Incomplete`. The message names the file and, for JSON, the location in it, such as `$.sections[2].version`.
 
-`DumpReader` checks the container and lists every section with its version. Skipping unknown sections, and sections whose major version a loader doesn't read (`DumpVersion.CanRead`), is the job of the converter's section loaders.
+`DumpReader` checks the container and lists every section with its version. Skipping unknown sections, and sections whose major version a loader doesn't read (`DumpVersion.CanRead`), is the job of the converter's section loaders (`WorldLoader` in `src/CsToBeamNG.Converter/Loading/`).
 
 ## Changelog
 
 | Version | Date | Change |
 |---|---|---|
-| Format 0.1 | 2026-11-17 | First version (step 0.3): layout, names, manifest, record files, string tables, JSON conventions. Completed before the first dump (step 0.4): the `counts` keys, the dump folder's location and name, the content of `game.mods`. |
+| Format 0.1 | 2026-11-17 | First version (step 0.3): layout, names, manifest, record files, string tables, JSON conventions. Completed before the first dump (step 0.4): the `counts` keys, the dump folder's location and name, the content of `game.mods`. The `probes` folder for developer probes, outside the format (step 0.7). |
+| `terrain` 0.1, `water` 0.1 | 2026-11-17 | First sections (step 1.2), with the [grid](#grids) convention. |

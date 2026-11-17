@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.CommandLine;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using CsToBeamNG.Converter.Automation;
 using CsToBeamNG.Converter.Discovery;
+using CsToBeamNG.Dump;
 
 namespace CsToBeamNG.Cli;
 
@@ -15,6 +17,8 @@ internal static class ExportCommand
     public const int FailedExitCode = 1;
 
     private const int DefaultTimeoutMinutes = 30;
+
+    private static readonly string[] _knownProbes = [DumpProbes.Geometry, DumpProbes.Heights];
 
     public static Command Create()
     {
@@ -40,6 +44,23 @@ internal static class ExportCommand
         {
             Description = "Leave the game running after the export instead of quitting it.",
         };
+        var probes = new Option<string[]>("--probe")
+        {
+            Description = "For development: also run a probe and write it into the dump's probes folder. "
+                + "Known probes: " + DumpProbes.Geometry + " (road meshes and how the game bends them; `cstobeamng dev geometry-probe` checks it), "
+                + DumpProbes.Heights + " (the game's terrain heights at roads, buildings and test points; `cstobeamng dev height-probe` checks it). Repeatable.",
+            HelpName = "name",
+        };
+        probes.Validators.Add(result =>
+        {
+            foreach (string probe in result.GetValueOrDefault<string[]>() ?? [])
+            {
+                if (!_knownProbes.Contains(probe))
+                {
+                    result.AddError($"Unknown probe '{probe}'. Known probes: {string.Join(", ", _knownProbes)}.");
+                }
+            }
+        });
         var command = new Command(
             "export",
             "Starts Cities: Skylines, loads a save, exports it into a city dump and quits the game, without anyone clicking. "
@@ -47,6 +68,7 @@ internal static class ExportCommand
         command.Arguments.Add(save);
         command.Options.Add(timeout);
         command.Options.Add(keepRunning);
+        command.Options.Add(probes);
         locations.AddTo(command);
         command.SetAction(parseResult =>
         {
@@ -59,7 +81,8 @@ internal static class ExportCommand
                 installDir => new CitiesSkylinesLauncher(installDir, environment.Os),
                 SystemWaitClock.Instance,
                 parseResult.InvocationConfiguration.Output,
-                parseResult.InvocationConfiguration.Error);
+                parseResult.InvocationConfiguration.Error,
+                parseResult.GetValue(probes) ?? []);
         });
         return command;
     }
@@ -72,7 +95,8 @@ internal static class ExportCommand
         Func<string, IGameLauncher> createLauncher,
         IWaitClock clock,
         TextWriter output,
-        TextWriter error)
+        TextWriter error,
+        IReadOnlyList<string>? probes = null)
     {
         CitiesSkylinesInfo game = environment.CitiesSkylines;
         if (game.InstallDir is not { Exists: true } installDir)
@@ -103,6 +127,7 @@ internal static class ExportCommand
             Timeout = timeout,
             KeepRunning = keepRunning,
             GameLogPath = game.LogFile?.Path,
+            Probes = probes ?? [],
         };
         UnattendedExportResult result = UnattendedExport.Run(options, createLauncher(installDir.Path), clock, message => output.WriteLine(message));
         if (!result.Succeeded)

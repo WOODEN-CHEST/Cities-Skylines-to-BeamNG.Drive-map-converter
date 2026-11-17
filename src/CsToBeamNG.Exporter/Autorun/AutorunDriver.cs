@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ColossalFramework;
 using CsToBeamNG.Dump.Autorun;
 using CsToBeamNG.Exporter.Core;
@@ -21,6 +22,7 @@ internal sealed class AutorunDriver : MonoBehaviour, IAutorunHost
 
     private AutorunSequence? _sequence;
     private StatusReporter? _reporter;
+    private IList<string> _probes = new string[0];
 
     /// <inheritdoc/>
     public bool IsMenuIdle
@@ -51,6 +53,7 @@ internal sealed class AutorunDriver : MonoBehaviour, IAutorunHost
         DontDestroyOnLoad(host);
         AutorunDriver driver = host.AddComponent<AutorunDriver>();
         driver._reporter = reporter;
+        driver._probes = request.Probes;
         driver._sequence = new AutorunSequence(request, driver);
         driver._sequence.Start(Time.realtimeSinceStartup);
     }
@@ -59,7 +62,7 @@ internal sealed class AutorunDriver : MonoBehaviour, IAutorunHost
     public string? StartLoadingSave(string saveName) => SaveLoader.StartLoading(saveName);
 
     /// <inheritdoc/>
-    public void StartExport() => ExportController.StartAutomatedExport(outcome =>
+    public void StartExport() => ExportController.StartAutomatedExport(_probes, outcome =>
         _sequence?.OnExportFinished(outcome.Succeeded, outcome.Message, outcome.DumpFolder));
 
     /// <inheritdoc/>

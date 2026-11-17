@@ -47,7 +47,8 @@
 - Textures that aren't CPU-readable can be read by blitting them into a `RenderTexture` and calling `ReadPixels` (ModTools' `MakeReadable`). [community]
 - The game converts textures to DXT and downscales them unless texture quality is set to High, so export with the game at High texture quality. [community]
 - **Mesh readability:**
-  - ModTools only dumps meshes whose `isReadable` is true; whether vanilla meshes are readable is unknown. [community]
+  - ModTools only dumps meshes whose `isReadable` is true. [community]
+  - Vanilla network meshes are readable: the segment, node and LOD meshes of the probed roads, highways and ramps all had `isReadable` true, and their vertex data could be read [verified 2026-11-17, game 1.21.1-f9, geometry probe; see [cs1-networks.md](cs1-networks.md#readability)]. Buildings, props and trees are still unchecked.
   - Workshop asset meshes and textures are created at load time and are probably readable; Loading Screen Mod creates textures via `LoadRawTextureData` + `Apply`. [community/inferred]
   - Fallback if needed: read meshes offline from the user's game files with a Unity asset reader (e.g. AssetsTools.NET, MIT). [inferred]
 
@@ -75,7 +76,7 @@
 
 ## Open questions
 
-- Readability of vanilla meshes.
+- Readability of vanilla building, prop and tree meshes (network meshes are readable).
 - Which prefab types use `_XYCAMap`.
 - How building-prop probability is seeded.
 - The internals of `PropInfo.GetColor` and `GetVariation`. This question goes away if the exporter calls them.

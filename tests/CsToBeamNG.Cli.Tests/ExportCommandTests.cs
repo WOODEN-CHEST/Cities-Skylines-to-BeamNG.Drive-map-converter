@@ -31,6 +31,16 @@ public sealed class ExportCommandTests : IDisposable
     }
 
     [Fact]
+    public void AcceptsKnownProbesOnly()
+    {
+        Assert.Empty(ExportCommand.Create().Parse(["CityPalma", "--probe", "geometry"]).Errors);
+        Assert.Empty(ExportCommand.Create().Parse(["CityPalma", "--probe", "heights", "--probe", "geometry"]).Errors);
+        Assert.Contains(
+            ExportCommand.Create().Parse(["CityPalma", "--probe", "nope"]).Errors,
+            e => e.Message.Contains("Unknown probe 'nope'", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ReportsAFailedExportWithItsIncompleteDump()
     {
         var game = new ScriptedGame(_temp.PathOf("user"), succeed: false);

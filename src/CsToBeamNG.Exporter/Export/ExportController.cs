@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ColossalFramework.IO;
 using ColossalFramework.Threading;
 using CsToBeamNG.Dump;
@@ -57,7 +58,15 @@ internal static class ExportController
     }
 
     /// <summary>The Export button's callback, on the main thread.</summary>
-    public static void OnExportClicked()
+    public static void OnExportClicked() => ExportFromButton(new string[0]);
+
+    /// <summary>
+    /// The developer button's callback, on the main thread: an export that also writes the geometry probe
+    /// (docs/research/cs1-networks.md).
+    /// </summary>
+    public static void OnGeometryProbeClicked() => ExportFromButton(new[] { DumpProbes.Geometry });
+
+    private static void ExportFromButton(IList<string> probes)
     {
         try
         {
@@ -73,7 +82,7 @@ internal static class ExportController
                 return;
             }
 
-            StartExport(outcome => ShowMessage(outcome.Message, !outcome.Succeeded));
+            StartExport(probes, outcome => ShowMessage(outcome.Message, !outcome.Succeeded));
         }
         catch (Exception e)
         {
@@ -88,8 +97,9 @@ internal static class ExportController
     /// Starts an export without UI, for autorun. <paramref name="onFinished"/> receives the outcome on the
     /// main thread, possibly before this method returns if the export can't start.
     /// </summary>
+    /// <param name="probes">Developer probes to run with the export (<see cref="DumpProbes"/>); unknown ones are skipped, as the log and the outcome's message say.</param>
     /// <param name="onFinished">Receives the outcome.</param>
-    public static void StartAutomatedExport(Action<ExportOutcome> onFinished)
+    public static void StartAutomatedExport(IList<string> probes, Action<ExportOutcome> onFinished)
     {
         ExportOutcome? refusal = null;
         if (!_cityLoaded)
@@ -104,7 +114,7 @@ internal static class ExportController
         {
             try
             {
-                StartExport(onFinished);
+                StartExport(probes, onFinished);
             }
             catch (Exception e)
             {
@@ -136,9 +146,9 @@ internal static class ExportController
         }
     }
 
-    private static void StartExport(Action<ExportOutcome> onFinished)
+    private static void StartExport(IList<string> probes, Action<ExportOutcome> onFinished)
     {
-        ExportJob job = ExportJob.Prepare(DumpsFolder);
+        ExportJob job = ExportJob.Prepare(DumpsFolder, probes);
         lock (_lock)
         {
             _activeJob = job;

@@ -34,6 +34,40 @@ public sealed class AutorunTests
     }
 
     [Fact]
+    public void WritesProbesOnlyWhenThereAreSome()
+    {
+        var request = new AutorunRequest("abc123", _created, "CityPalma", quitWhenDone: true, ["geometry", "other-probe", "geometry"]);
+
+        Assert.Equal(
+            "# CsToBeamNG autorun request\nformat=1\nid=abc123\ncreated=2026-11-17T16:30:05Z\nsave=CityPalma\nquit=true\nprobes=geometry,other-probe\n",
+            request.ToText());
+        Assert.Equal(["geometry", "other-probe"], AutorunRequest.Parse(request.ToText()).Probes);
+        Assert.Empty(AutorunRequest.Parse(new AutorunRequest("a", _created, "s", quitWhenDone: true).ToText()).Probes);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Geometry")]
+    [InlineData("geometry,")]
+    [InlineData("1st")]
+    public void RejectsInvalidProbeNames(string probes)
+    {
+        string text = "format=1\nid=x\ncreated=2026-11-17T16:30:05Z\nsave=A\nquit=true\nprobes=" + probes + "\n";
+
+        if (probes.Length == 0)
+        {
+            // An empty value means no probes.
+            Assert.Empty(AutorunRequest.Parse(text).Probes);
+        }
+        else
+        {
+            Assert.Throws<FormatException>(() => AutorunRequest.Parse(text));
+        }
+
+        Assert.Throws<ArgumentException>(() => new AutorunRequest("a", _created, "s", quitWhenDone: true, ["Bad"]));
+    }
+
+    [Fact]
     public void WritesTheTimeTheSameWayInEveryCulture()
     {
         using var culture = new CultureScope("lv-LV");

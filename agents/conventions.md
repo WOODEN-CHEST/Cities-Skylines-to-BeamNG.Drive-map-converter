@@ -73,7 +73,7 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
 - Output is deterministic, which keeps diffs and golden tests meaningful:
   - stable ordering;
   - no timestamps or random GUIDs in generated files (BeamNG `persistentId`s come from `PersistentId.ForObject(level, key)`, with keys derived from the input, such as a CS1 object id);
-  - for output that must match across platforms, avoid `Math.Sin`, `Math.Exp` and similar in generated values: .NET takes them from each platform's C library, whose last bits can differ. Arithmetic and `Math.Sqrt` are exact everywhere (`HelloLevel` and `RotationMatrix.YawTowards` work this way);
+  - for output that must match across platforms, avoid `Math.Sin`, `Math.Exp` and similar in generated values: .NET takes them from each platform's C library, whose last bits can differ. Arithmetic and `Math.Sqrt` are exact everywhere (`HelloLevel` and `RotationMatrix.YawTowards` work this way). For rotations from angles, use `CoordinateMapping.RotationToBeamNG`, which has its own sine and cosine (`DeterministicTrig`);
   - parallel work merged in a fixed order.
 
 ## Errors, logging, diagnostics

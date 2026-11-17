@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace CsToBeamNG.Converter.Automation;
 
@@ -22,4 +23,10 @@ public sealed record UnattendedExportOptions
 
     /// <summary>The game's log file, named in messages about failures, if known.</summary>
     public string? GameLogPath { get; init; }
+
+    /// <summary>
+    /// Developer probes to run with the export (<c>CsToBeamNG.Dump.DumpProbes</c>); empty for a normal
+    /// export. The exporter writes them into the dump's <c>probes</c> folder.
+    /// </summary>
+    public IReadOnlyList<string> Probes { get; init; } = [];
 }

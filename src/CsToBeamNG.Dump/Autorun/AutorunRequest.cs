@@ -25,6 +25,7 @@ public sealed class AutorunRequest
     private const string CreatedKey = "created";
     private const string SaveKey = "save";
     private const string QuitKey = "quit";
+    private const string ProbesKey = "probes";
     // Quoted so that no culture can change the separators.
     private const string TimeFormat = "yyyy'-'MM'-'dd'T'HH':'mm':'ss'Z'";
 
@@ -33,7 +34,11 @@ public sealed class AutorunRequest
     /// <param name="createdUtc">When the request was written, in UTC (a local time is converted). Stored to the second.</param>
     /// <param name="saveName">The save to load, as the game's Load panel lists it (normally the file name without <c>.crp</c>).</param>
     /// <param name="quitWhenDone">Whether the game should quit after the export, whether it succeeded or not.</param>
-    public AutorunRequest(string id, DateTime createdUtc, string saveName, bool quitWhenDone)
+    /// <param name="probes">
+    /// Developer probes to run with the export (<see cref="DumpProbes"/>), or <see langword="null"/> for none.
+    /// Each name must pass <see cref="DumpProbes.IsValidName"/>.
+    /// </param>
+    public AutorunRequest(string id, DateTime createdUtc, string saveName, bool quitWhenDone, IList<string>? probes = null)
     {
         Guard.NotNull(id, nameof(id));
         Guard.NotNull(saveName, nameof(saveName));
@@ -47,10 +52,28 @@ public sealed class AutorunRequest
             throw new ArgumentException("The save name must not be empty.", nameof(saveName));
         }
 
+        var probeList = new List<string>();
+        if (probes is not null)
+        {
+            foreach (string probe in probes)
+            {
+                if (!DumpProbes.IsValidName(probe))
+                {
+                    throw new ArgumentException("'" + probe + "' is not a valid probe name.", nameof(probes));
+                }
+
+                if (!probeList.Contains(probe))
+                {
+                    probeList.Add(probe);
+                }
+            }
+        }
+
         Id = id;
         CreatedUtc = TruncateToSeconds(createdUtc);
         SaveName = saveName;
         QuitWhenDone = quitWhenDone;
+        Probes = probeList.AsReadOnly();
     }
 
     /// <summary>Identifies the request; the exporter copies it into its status.</summary>
@@ -64,6 +87,12 @@ public sealed class AutorunRequest
 
     /// <summary>Whether the game should quit after the export, whether it succeeded or not.</summary>
     public bool QuitWhenDone { get; }
+
+    /// <summary>
+    /// The developer probes to run with the export, without duplicates, in the order given. Empty for a
+    /// normal export. The exporter ignores names it doesn't know, so a newer tool can ask for more.
+    /// </summary>
+    public IList<string> Probes { get; }
 
     /// <summary>
     /// Reads a request. Text that isn't a valid request of <see cref="FormatVersion"/> throws a
@@ -93,7 +122,22 @@ public sealed class AutorunRequest
             throw new FormatException("The id and the save must not be empty.");
         }
 
-        return new AutorunRequest(id, createdUtc, save, quit);
+        var probes = new List<string>();
+        string? probesText = AutorunFields.Optional(values, ProbesKey);
+        if (probesText is not null)
+        {
+            foreach (string probe in probesText.Split(','))
+            {
+                if (!DumpProbes.IsValidName(probe))
+                {
+                    throw new FormatException("'" + probe + "' in '" + ProbesKey + "' is not a valid probe name.");
+                }
+
+                probes.Add(probe);
+            }
+        }
+
+        return new AutorunRequest(id, createdUtc, save, quit, probes);
     }
 
     /// <summary>
@@ -117,15 +161,26 @@ public sealed class AutorunRequest
     /// <param name="nowUtc">The current time, in UTC.</param>
     public bool IsStale(DateTime nowUtc) => nowUtc - CreatedUtc > MaxAge;
 
-    /// <summary>Returns the file's text.</summary>
-    public string ToText() => "# CsToBeamNG autorun request\n" + KeyValueText.Format(
-    [
-        new(FormatKey, FormatVersion.ToString(CultureInfo.InvariantCulture)),
-        new(IdKey, Id),
-        new(CreatedKey, CreatedUtc.ToString(TimeFormat, CultureInfo.InvariantCulture)),
-        new(SaveKey, SaveName),
-        new(QuitKey, AutorunFields.FormatBoolean(QuitWhenDone)),
-    ]);
+    /// <summary>Returns the file's text. The probes key is left out when there are none.</summary>
+    public string ToText()
+    {
+        var pairs = new List<KeyValuePair<string, string>>
+        {
+            new(FormatKey, FormatVersion.ToString(CultureInfo.InvariantCulture)),
+            new(IdKey, Id),
+            new(CreatedKey, CreatedUtc.ToString(TimeFormat, CultureInfo.InvariantCulture)),
+            new(SaveKey, SaveName),
+            new(QuitKey, AutorunFields.FormatBoolean(QuitWhenDone)),
+        };
+        if (Probes.Count > 0)
+        {
+            string[] names = new string[Probes.Count];
+            Probes.CopyTo(names, 0);
+            pairs.Add(new(ProbesKey, string.Join(",", names)));
+        }
+
+        return "# CsToBeamNG autorun request\n" + KeyValueText.Format(pairs);
+    }
 
     private static DateTime TruncateToSeconds(DateTime time)
     {

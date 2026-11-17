@@ -81,7 +81,11 @@ internal sealed class CityReader
         return snapshot;
     }
 
-    private static T Require<T>()
+    /// <summary>
+    /// Returns a manager of the game without creating it. Main thread only (see <see cref="Create"/>).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The manager doesn't exist.</exception>
+    internal static T Require<T>()
         where T : Component
     {
         if (!Singleton<T>.exists)

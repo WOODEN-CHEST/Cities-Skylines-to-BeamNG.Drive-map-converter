@@ -40,18 +40,59 @@
 
 ## Terrain
 
-- **Height grid:** 1081 × 1081 points at 16 m spacing, covering the whole map. Heights are stored as u16 / 64, giving 0–1024 m.
-- **Height arrays:** `TerrainManager` exposes `RawHeights` (as authored or terraformed) and `FinalHeights` (after modifications). [community: [ExtraLandscapingTools TerrainToolDetour.cs](https://github.com/bloodypenguin/Skylines-ExtraLandscapingTools/blob/master/NaturalResourcesBrush/Detours/TerrainToolDetour.cs), [GeoSkylines](https://github.com/gonzikcz/GeoSkylines)] [verified: both names exist in Assembly-CSharp]
-- **Detail grid:** 480 × 480 cells per 1920 m tile (4 m cells), but only for tiles that have detail data allocated. Which tiles get detail data in vanilla is unverified. [community: [EML ETerrainManager.cs](https://github.com/Quistar-LAB/EManagersLib/blob/master/ETerrainManager.cs)]
-- **Sampling helpers** exist: `SampleDetailHeight`, `SampleRawHeightSmooth`, `SampleRawHeightSmoothWithWater`, `SampleRawHeightWithWater`, `GetBlockHeight`, and `GetSurfaceCell` (surface painting such as pavement, gravel, ruined). [verified: the names exist; their semantics are community or inferred]
-- **Open:** which height source matches the rendered ground under roads and buildings. Step 1.2 investigates.
+[verified 2026-11-17 by reading the IL of `TerrainManager`, `TerrainModify`, `TerrainPatch` and `GameAreaManager` (Steam build 22724702, game 1.21.1-f9), and in game with step 1.2's heights probe in CityPalma and CItyRockville, unless tagged otherwise]
+
+**Grids.** `TerrainManager` stores heights as `ushort` values in 1/64 m, so 0 to 1023.98 m (`TERRAIN_HEIGHT` is 1024).
+
+- The main grid has `RAW_RESOLUTION` = 1080 cells of `RAW_CELL_SIZE` = 16 m: 1081 × 1081 points from −8640 to +8640 m, stored row by row (index z · 1081 + x). The game turns a world position into grid coordinates with x / 16 + 540.
+- The detail grid has `DETAIL_CELL_SIZE` = 4 m and `DETAIL_RESOLUTION` = 480 cells per tile. The terrain is divided into `PATCH_RESOLUTION` × `PATCH_RESOLUTION` = 9 × 9 patches (`m_patches`, index z · 9 + x), one per map tile, so the detail grid has 4321 points per side (x / 4 + 2160).
+
+**The height arrays:**
+
+| Array (getter) | Content |
+|---|---|
+| `m_rawHeights` (`RawHeights`) | The terrain as the map editor and the landscaping tool shaped it. |
+| `m_rawHeights2` (`RawHeights2`) | A copy of the raw heights that `TerrainModify` refreshes whenever it recalculates an area. The `SampleRaw…` samplers read this copy. In both test cities it equalled the raw heights everywhere. |
+| `m_finalHeights` (`FinalHeights`) | The raw heights levelled by roads, buildings and the other networks, without the block and dig adjustments below. |
+| `m_blockHeights2` (`BlockHeightTargets`) | The final heights raised to each modification's block height and cut to its dig height. |
+| `m_blockHeights` (`BlockHeights`) | The current block heights. On rows that changed, each simulation step moves them towards the targets: up by at most 2 m in a game (8 m in the editors), down by at most 8 m. They are the water simulation's ground (see [Water](#water)). |
+| `m_detailHeights`, `m_detailHeights2` (public fields) | The 4 m counterparts of the final heights and the block targets, for the tiles that have detail data: one block of 481 × 481 values per tile (its edges included), in the order the tiles got detail data. `TerrainPatch.m_simDetailIndex` is a tile's block number plus 1, or 0 without detail data. |
+
+**How the levelled heights are computed** (`TerrainModify.UpdateAreaImplementation`). For every point of a changed area, the game starts from the raw height; on the 4 m grid, from the raw heights interpolated with its smooth cubic (`SmoothSample`, below) in both directions. Every road, building and other modifier there adjusts a target and divider, primary and secondary minimum and maximum, a block height and a dig height (`TerrainModify.HeightModification`). The final (or detail) height is target / divider, clamped to the secondary and then the primary range. The block target is that height raised to the block height, cut to the dig height and limited to the primary maximum. In the probe, the block targets lay above the final heights at building positions by roughly the building's height (5–10 m at houses and shops, 18 m at a factory, 21 m at a school), so the block height presumably makes buildings solid obstacles for the water [inferred].
+
+**Which tiles have detail heights: the unlocked ones.** `GameAreaManager` calls `TerrainManager.SetDetailedPatch` for every unlocked tile when a city loads and when a tile is bought; it allocates detail data for up to `GameAreaManager.MaxAreaCount` tiles. [Also in game: CityPalma's 3 unlocked tiles and CItyRockville's 1 had detail heights, no others.] 81 Tiles 2 presumably extends this to the tiles it unlocks [inferred].
+
+**What the game draws.** `TerrainPatch.Refresh` fills each patch's height texture with 16-bit heights in two of its channels and the block targets in the other two. A patch with detail data gets one value per 4 m point from `GetDetailHeight`; a patch without, one per 16 m point from the final heights. Which channel the terrain shader displaces the ground with can't be read from the IL [inferred: the final heights], but objects that the game places with `SampleDetailHeight` sit on the drawn ground, and the probe below agrees.
+
+**Samplers.** Positions in world coordinates unless noted; heights in metres for the `Vector3` overloads, in 1/64 m for the grid-coordinate overloads.
+
+- `SampleDetailHeight` reads the ground: bilinear on the 4 m grid where the tile has detail heights, otherwise `SampleFinalHeight`, bilinear on the 16 m final heights. Its point lookup `GetDetailHeight(x, z)` takes the tile min(x / 480, 8), so a point on the line between two tiles belongs to the tile on its +X (or +Z) side. On a tile's −X or −Z edge next to a tile without detail heights, it uses the final heights instead, so the tiles meet without a step. Buildings' props, props, citizens, vehicles and wildlife are placed with it.
+- `SampleRawHeightSmooth` reads the raw heights (the copy) with the smooth cubic. Roads (`NetSegment`, `NetTool`), buildings and zone blocks place themselves with it, before they level the ground. `SampleOriginalRawHeightSmooth` reads `m_rawHeights` the same way.
+- `SampleFinalHeight` and `SampleFinalHeightSmooth` read the final heights; `SampleBlockHeight` and `SampleBlockHeightSmooth` the block targets. `SampleRawHeightSmoothWithWater` and `SampleBlockHeightSmoothWithWater` add the water ([Water](#water)).
+- The smooth variants interpolate between the two middle values of four neighbours with a cubic whose slopes are limited by the neighbouring differences, so it doesn't overshoot (`SmoothSample(h1, h2, h3, h4, t)`), first along X, then along Z.
+
+**Probe results.** The heights probe (`cstobeamng export <save> --probe heights`; `cstobeamng dev height-probe <dump>` evaluates it) records the game's samplers at 60 network nodes, 40 segment middles, 60 buildings with their lot corners and 500 test points. [verified in game 2026-11-17, CityPalma and CItyRockville]
+
+- The converter's reading of the dumped final and detail heights (`CityTerrain.SampleGround`) reproduces `SampleDetailHeight` at all 900 positions of each city within 0.9 mm, mean 0.03 mm, and the final and raw heights reproduce `SampleFinalHeight` and `SampleRawHeight` as closely. The remaining difference comes from the game's 32-bit grid coordinates on steep slopes.
+- Roads on the ground: nodes and segment middles lie 0.7 to 0.9 cm (median) above `SampleDetailHeight`. In CityPalma all 49 lie within 2 cm, in CItyRockville 38 of 53, the rest up to 1.0 m. Above the raw heights they lie 0.3 to 0.6 m (median), up to 4.3 m.
+- Buildings the player built: the height of a building's position lies 0.6 to 1.0 cm (median) above `SampleDetailHeight` there; 30 of 41 within 2 cm, the rest within 0.4 m. The ground at the lots' corners isn't level: 0.2 to 3.5 m above or below. Above the raw heights the buildings lie 0.24 to 2.6 m (median).
+- Decorations placed with the map editor as buildings (flag `Original`: boulders, rock formations), pillars, pipes, power lines, and ship and airplane paths don't sit on the ground.
+- The arrays: the final heights differed from the raw heights at 27,758 points in CityPalma and 24,787 in CItyRockville (from 9.3 m lower to 27.5 m higher). The block targets lay above the final heights at 3,213 and 936 points (by up to 70.9 and 80.2 m), and the current block heights still differed from their targets at 299 and 262 points (by up to 4 m).
+
+**Conclusion.** The ground the game draws, under roads and building lots too, is the final heights refined by the detail heights in the unlocked tiles, read the way `SampleDetailHeight` reads them. The raw heights are the terrain before levelling, and the block heights are the water's ground, not the visible one. The dump's `terrain` section stores the raw, final and detail heights as the game does ([dump-format.md, `terrain`](../dump-format.md#terrain-01)).
 
 ## Water
 
-- **Sea level** is a map setting, 0–500 according to the map editor wiki. [community: Map Editor wiki]
-- **Water sources** have a target height (default 50) and keep producing water until the surface reaches it. [community: Map Editor wiki]
-- **Sampling:** surface heights can be read with `SampleRawHeightSmoothWithWater` and `SampleRawHeightWithWater`. Sources are in the `WaterSimulation`'s `m_waterSources`. [verified: the names exist; semantics community]
-- **Open:** the storage format and resolution of the water grid, and where the sea level value lives. There is no field called `m_seaLevel` [verified].
+[verified 2026-11-17 by reading the IL of `WaterSimulation`, `TerrainManager` and `WaterTool` (Steam build 22724702), and in game by step 1.2's exports, unless tagged otherwise]
+
+- **Sea level:** `WaterSimulation.m_currentSeaLevel`, a float in metres; `m_nextSeaLevel` carries a change (the map editor's sea level option), which the next water step takes over. `DEFAULT_SEA_LEVEL` is 40 and `MAX_SEA_LEVEL` 500. Unity doesn't serialise the field, but the game's own serialiser saves it with the water data. The simulation keeps the water along the map's edges near the sea level [inferred from the IL]. CityPalma (Diamond Coast) has 59.999 m, CItyRockville (Shady Strands) 45 m.
+- **Cells:** `WaterSimulation.Cell` holds `m_height`, the water depth in 1/64 m; `m_pollution`; and `m_velocityX` and `m_velocityZ` (game units). There is one cell per point of the terrain's 1081 × 1081 grid, in `m_waterBuffers`. The water simulation runs on its own thread; `BeginRead()` returns the buffer to read and keeps it from being replaced until `EndRead()`. The game's own samplers read it this way, and so does the exporter.
+- **Ground:** the water fills `WaterSimulation.m_heightBuffer`, which is `TerrainManager.m_blockHeights`: the same array, handed over when the terrain manager starts. So the water lies on the levelled terrain with buildings as obstacles, not on the ground the game draws ([Terrain](#terrain)).
+- **Surface:** `TerrainManager.GetSurfaceHeight` gives, for at least 1 m of water, the block height plus the depth, and for shallower water the raw height (the copy) plus the depth. The renderer (`WaterSimulation.FillHeightMap`) takes the ground plus the depth of a cell and of its wet neighbours, combines them, and lowers the result by 20 units (0.31 m) before writing it into the patches' water textures; dry cells next to water get their neighbours' surface, so the shore is drawn. Water therefore shows only where it is deeper than about 0.31 m [inferred].
+- **Water sources:** `WaterSimulation.m_waterSources`, a `FastList<WaterSource>`. A source's id is its index plus 1; a free slot has `m_type` 0 (`TYPE_NONE`). The game locks the list (`Monitor`) whenever it reads or changes it.
+  - Fields: `m_inputPosition` and `m_outputPosition`; `m_type` (1 natural, from the map editor; 2 a building's, such as a water pumping station's intake or a sewage outlet; 3 a water treatment plant's); `m_target`, the water surface height the source works towards, in 1/64 m (the map editor's water tool stores the clicked height × 64); and `m_water`, `m_pollution`, `m_inputRate`, `m_outputRate` and `m_flow`.
+  - Each water step resets `m_flow`, and a natural source's water and pollution. An intake takes the water above the higher of its target and the ground within a radius of √rate × 0.4 + 10 m (at most 50 m for buildings); an outlet adds water within a similar radius, a natural one only where the surface is below its target.
+- **In game:** CityPalma has 380,309 wet cells (97 km²) and 10 sources (5 natural, 5 of buildings); CItyRockville 538,040 wet cells (138 km²) and 29 sources (27 natural, 2 of buildings).
 
 ## Instance limits (vanilla)
 
@@ -170,7 +211,7 @@ Most names below are verified to exist in the game assemblies. Their use and sem
 - **Networks:** `NetManager.instance.m_nodes` / `m_segments` / `m_lanes`, each with `.m_buffer` [verified: counted by step 0.4; see Instance limits]. `NetLane.m_bezier` [verified].
 - **Buildings:** `BuildingManager.instance.m_buildings.m_buffer` [verified: counted by step 0.4].
 - **Props:** `PropManager.instance.m_props.m_buffer`. **Trees:** `TreeManager.instance.m_trees.m_buffer` [verified: counted by step 0.4].
-- **Terrain and water:** `TerrainManager.instance`, `WaterSimulation` [verified].
+- **Terrain and water:** `TerrainManager.instance` with `RawHeights`, `FinalHeights`, `BlockHeights`, `m_detailHeights`, `m_patches` and the `Sample…` samplers; `TerrainManager.WaterSimulation` with `m_currentSeaLevel`, `BeginRead`/`EndRead` and `m_waterSources` [verified: read by step 1.2's exporter; see [Terrain](#terrain) and [Water](#water)].
 - **City metadata:** `SimulationManager.instance.m_metaData` (`SimulationMetaData`) [verified names and types 2026-11-17]:
   - `m_CityName` (the city's name), `m_MapName` (the map the city was started on) and `m_environment` (the climate, such as `Sunny`), all strings;
   - `m_MapThemeMetaData` (`MapThemeMetaData`, not saved with the city): the custom map theme, or null; its `name` is the theme's name, and it has its own `environment`;

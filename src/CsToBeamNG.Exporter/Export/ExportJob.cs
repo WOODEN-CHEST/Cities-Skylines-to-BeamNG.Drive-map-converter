@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Text;
 using CsToBeamNG.Dump;
 using CsToBeamNG.Dump.Manifest;
+using CsToBeamNG.Dump.Sections;
 using CsToBeamNG.Exporter.Core;
 using CsToBeamNG.Exporter.Game;
+using CsToBeamNG.Exporter.Probes;
 
 namespace CsToBeamNG.Exporter.Export;
 
@@ -18,27 +21,33 @@ namespace CsToBeamNG.Exporter.Export;
 internal sealed class ExportJob
 {
     private readonly CityReader _reader;
+    private readonly TerrainReader? _terrain;
     private readonly string _dumpsFolder;
     private readonly DateTime _startUtc;
     private readonly DumpManifest _manifest;
     private readonly IList<string> _problems;
     private readonly string _gameVersionFull;
+    private readonly IList<string> _probes;
     private volatile bool _abandoned;
 
     private ExportJob(
         CityReader reader,
+        TerrainReader? terrain,
         string dumpsFolder,
         DateTime startUtc,
         DumpManifest manifest,
         IList<string> problems,
-        string gameVersionFull)
+        string gameVersionFull,
+        IList<string> probes)
     {
         _reader = reader;
+        _terrain = terrain;
         _dumpsFolder = dumpsFolder;
         _startUtc = startUtc;
         _manifest = manifest;
         _problems = problems;
         _gameVersionFull = gameVersionFull;
+        _probes = probes;
     }
 
     /// <summary>
@@ -46,11 +55,13 @@ internal sealed class ExportJob
     /// enabled mods. Nothing is written yet.
     /// </summary>
     /// <param name="dumpsFolder">The folder for the new dump's folder.</param>
-    public static ExportJob Prepare(string dumpsFolder)
+    /// <param name="probes">Developer probes to run after the city is read (<see cref="DumpProbes"/>).</param>
+    public static ExportJob Prepare(string dumpsFolder, IList<string> probes)
     {
         DateTime startUtc = DateTime.UtcNow;
         CityReader reader = CityReader.Create();
         var problems = new List<string>();
+        TerrainReader? terrain = CreateTerrainReader(problems);
         IList<GameModInfo> mods = ModListReader.ReadEnabledMods(problems);
         DumpManifest manifest = ManifestBuilder.CreateInitial(
             GetExporterVersion(),
@@ -58,7 +69,7 @@ internal sealed class ExportJob
             mods,
             reader.ReadCityName(),
             startUtc);
-        return new ExportJob(reader, dumpsFolder, startUtc, manifest, problems, BuildConfig.applicationVersionFull);
+        return new ExportJob(reader, terrain, dumpsFolder, startUtc, manifest, problems, BuildConfig.applicationVersionFull, new List<string>(probes));
     }
 
     /// <summary>Marks the export as abandoned because the city is being closed, so <see cref="Run"/> won't read it.</summary>
@@ -103,10 +114,12 @@ internal sealed class ExportJob
                 log.Warning(problem);
             }
 
+            WriteSections(writer, log);
+            string probeSummary = RunProbes(writer.Folder, log);
             _manifest.Complete = true;
             writer.WriteManifest();
             log.Info("Export finished: " + writer.Folder);
-            return new ExportOutcome(true, SuccessMessage(writer.Folder, snapshot), writer.Folder);
+            return new ExportOutcome(true, SuccessMessage(writer.Folder, snapshot) + probeSummary, writer.Folder);
         }
         catch (Exception e)
         {
@@ -116,6 +129,100 @@ internal sealed class ExportJob
         {
             log?.Dispose();
         }
+    }
+
+    private static TerrainReader? CreateTerrainReader(List<string> problems)
+    {
+        try
+        {
+            return TerrainReader.Create();
+        }
+        catch (InvalidOperationException e)
+        {
+            problems.Add("The terrain and the water can't be exported: " + e.Message);
+            return null;
+        }
+    }
+
+    // Each section is written on its own: one that fails is left out with a warning, and the export goes on
+    // (agents/conventions.md, one bad object must not abort an export).
+    private void WriteSections(DumpWriter writer, ExportLog log)
+    {
+        if (_terrain is null)
+        {
+            return;
+        }
+
+        WriteSection(log, TerrainSection.Name, () =>
+        {
+            var problems = new List<string>();
+            TerrainSectionContent terrain = _terrain.ReadTerrain(problems);
+            AddProblems(log, problems);
+            TerrainSectionWriter.Write(writer, terrain);
+            return SectionSummary.Describe(terrain);
+        });
+        WriteSection(log, WaterSection.Name, () =>
+        {
+            WaterSectionContent water = _terrain.ReadWater();
+            WaterSectionWriter.Write(writer, water);
+            return SectionSummary.Describe(water);
+        });
+    }
+
+    private void WriteSection(ExportLog log, string name, Func<string> write)
+    {
+        Stopwatch watch = Stopwatch.StartNew();
+        try
+        {
+            string summary = write();
+            log.Info(string.Format(
+                CultureInfo.InvariantCulture,
+                "Section {0} written in {1} ms: {2}",
+                name,
+                watch.ElapsedMilliseconds,
+                summary));
+        }
+        catch (Exception e)
+        {
+            log.Warning("Section " + name + " couldn't be exported, so the dump has none: " + e);
+            _manifest.Warnings.Add("The " + name + " couldn't be exported: " + e.Message);
+        }
+    }
+
+    private void AddProblems(ExportLog log, List<string> problems)
+    {
+        foreach (string problem in problems)
+        {
+            log.Warning(problem);
+            _manifest.Warnings.Add(problem);
+        }
+    }
+
+    // Probes are developer tools: a failing probe is logged and reported, but the dump stays valid.
+    private string RunProbes(string dumpFolder, ExportLog log)
+    {
+        var summary = new StringBuilder();
+        foreach (string probe in _probes)
+        {
+            string folder = Path.Combine(Path.Combine(dumpFolder, DumpProbes.FolderName), probe);
+            try
+            {
+                string result = probe == DumpProbes.Geometry
+                    ? GeometryProbe.Write(folder, log)
+                    : probe == DumpProbes.Heights
+                        ? HeightsProbe.Write(folder, log)
+                        : "skipped: this exporter doesn't know the probe";
+                log.Info("Probe " + probe + ": " + result);
+                summary.Append("\n\nProbe ").Append(probe).Append(": ").Append(result);
+            }
+            catch (Exception e)
+            {
+                log.Warning("Probe " + probe + " failed: " + e);
+                summary.Append("\n\nProbe ").Append(probe).Append(" failed: ").Append(e.Message);
+            }
+        }
+
+        return summary.ToString();
     }
 
     private static string GetExporterVersion()

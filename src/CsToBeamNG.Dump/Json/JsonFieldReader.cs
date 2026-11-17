@@ -138,6 +138,18 @@ internal sealed class JsonFieldReader
         return value;
     }
 
+    /// <summary>A finite number, read as a 32-bit float (docs/dump-format.md, JSON files).</summary>
+    public float RequiredSingle(JsonElement parent, string name, string parentPath)
+    {
+        JsonElement element = Required(parent, name, parentPath);
+        if (element.ValueKind != JsonValueKind.Number || !element.TryGetSingle(out float value) || !float.IsFinite(value))
+        {
+            throw Error(Child(parentPath, name), "expected a finite number, found " + Describe(element));
+        }
+
+        return value;
+    }
+
     public DumpVersion RequiredVersion(JsonElement parent, string name, string parentPath)
     {
         JsonElement element = Required(parent, name, parentPath);

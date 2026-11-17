@@ -47,7 +47,7 @@ public static class UnattendedExport
         string folder = AutorunFiles.GetFolder(options.UserDataDir);
         string requestPath = Path.Join(folder, AutorunFiles.RequestFileName);
         string statusPath = Path.Join(folder, AutorunFiles.StatusFileName);
-        var request = new AutorunRequest(Guid.NewGuid().ToString("N"), clock.UtcNow, options.SaveName, quitWhenDone: !options.KeepRunning);
+        var request = new AutorunRequest(Guid.NewGuid().ToString("N"), clock.UtcNow, options.SaveName, quitWhenDone: !options.KeepRunning, [.. options.Probes]);
         try
         {
             Directory.CreateDirectory(folder);

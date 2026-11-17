@@ -52,7 +52,8 @@ internal static class DumpNames
             }
         }
 
-        return !IsReserved(name, 0, name.Length);
+        // The probes folder lies next to the sections (docs/dump-format.md, Layout).
+        return !IsReserved(name, 0, name.Length) && name != DumpProbes.FolderName;
     }
 
     /// <summary>Checks a file's path within its section folder.</summary>

@@ -136,6 +136,7 @@ public sealed class DumpWriterTests
 
         Assert.Throws<ArgumentException>(() => dump.BeginSection("Net_Nodes", new DumpVersion(0, 1)));
         Assert.Throws<ArgumentException>(() => dump.BeginSection("aux", new DumpVersion(0, 1)));
+        Assert.Throws<ArgumentException>(() => dump.BeginSection(DumpProbes.FolderName, new DumpVersion(0, 1)));
         dump.BeginSection("terrain", new DumpVersion(0, 1));
         Assert.Throws<InvalidOperationException>(() => dump.BeginSection("terrain", new DumpVersion(0, 2)));
     }

@@ -21,6 +21,7 @@ CS1-side changes need a fresh dump from the game. Since step 0.6 the agent can e
 2. Ask the user once per session whether you may start Cities: Skylines, possibly several times. Tell them it starts, loads the save, exports and quits by itself, and that they shouldn't click in it. It needs the Steam client running and the exporter mod enabled in Content Manager → Mods (the setting persists).
 3. Run `dotnet run --project src/CsToBeamNG.Cli -- export <save>`, e.g. `export CityPalma` (`doctor` lists the saves). Run it in the background; it prints progress and ends with `Dump: <folder>`, or with `error: ...` and exit code 1. `--keep-running` leaves the game open afterwards; `--timeout <minutes>` (default 30) limits the wait, after which the game is stopped.
 4. Check the dump as below. The game log is overwritten at every start, so copy it into `agents/local/scratch/<step>/` if you need it later.
+5. For research on the game's own behaviour, `--probe <name>` also writes a developer probe into the dump's `probes/` folder (D23 in `docs/architecture.md`). `--probe geometry` captures road meshes and how the game bends them; `cstobeamng dev geometry-probe <dump>` compares the converter's bending with it and exits with 1 if a vertex is more than 1 mm off. `--probe heights` records the game's terrain heights at roads, buildings and test points; `cstobeamng dev height-probe <dump>` compares the converter's terrain with them and exits with 1 if a height is more than 5 mm off.
 
 How it works and what its messages mean: [docs/architecture.md, Unattended export](../docs/architecture.md#unattended-export). If it fails because the game exits without taking the request, the mod is probably disabled; ask the user to enable it.
 
@@ -28,7 +29,7 @@ How it works and what its messages mean: [docs/architecture.md, Unattended expor
 
 > Start Cities: Skylines. In Content Manager → Mods, enable *CS to BeamNG Exporter* (first time only). Load CityPalma. Open Options, choose *CS to BeamNG Exporter* under Mod Settings, and click *Export city*. Tell me what the message says.
 
-**Afterwards,** read the newest dump folder in `<CS1 user data>/CsToBeamNG/dumps/`, its `manifest.json` and `export.log`, and the game log (locations in `agents/environment.md`). Look for exceptions and `[CsToBeamNG]` warnings. If several changes need the game, run it once for all of them.
+**Afterwards,** read the newest dump folder in `<CS1 user data>/CsToBeamNG/dumps/` (`cstobeamng inspect <dump>` summarises it and reports damaged or skipped sections), its `manifest.json` and `export.log`, and the game log (locations in `agents/environment.md`). Look for exceptions and `[CsToBeamNG]` warnings. If several changes need the game, run it once for all of them.
 
 ## 3. BeamNG side (the agent can do this)
 
@@ -70,7 +71,7 @@ Without MCP, ask the user for screenshots and the BeamNG log (`<BeamNG user fold
 ## 4. Comparing with Cities: Skylines
 
 - Define camera poses once in CS1 world coordinates, then convert them with the converter's coordinate module so both games show the same view.
-- Top-down debug renders from `cstobeamng inspect` (step 1.1) are the quickest way to check layout and alignment.
+- Top-down debug renders are the quickest way to check layout and alignment: `cstobeamng inspect <dump> --render <file.png>` draws the area of interest with +X (east) right and +Z (north, BeamNG's +Y) up, as both games show the map from above. `--area map` draws the whole map, `--area 3-5,4` a block of tiles and `--area minX,minZ,maxX,maxZ` a rectangle in metres; `--size` sets the longer side in pixels. The layers show the terrain (shaded, tinted by height) and the water with its sources; the legend in `inspect`'s output names each layer's colours. Save renders under `agents/local/scratch/<step>/` and look at them.
 - For appearance, use the save's own snapshot image and the user's CS1 screenshots as references.
 
 ## 5. Reporting

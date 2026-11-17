@@ -62,5 +62,8 @@ public sealed class ExporterMod : IUserMod
             // The label is only information; the page must still work without it.
             GameLog.Warning("The dumps folder couldn't be shown in Options: " + e);
         }
+
+        UIHelperBase developer = helper.AddGroup("Developer tools");
+        developer.AddButton("Export city with geometry probe", ExportController.OnGeometryProbeClicked);
     }
 }

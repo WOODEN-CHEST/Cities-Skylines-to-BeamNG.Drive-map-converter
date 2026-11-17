@@ -11,6 +11,7 @@ internal static class Program
         RootCommand rootCommand = new("Converts a Cities: Skylines city into a drivable BeamNG.drive level.");
         rootCommand.Subcommands.Add(DoctorCommand.Create());
         rootCommand.Subcommands.Add(ExportCommand.Create());
+        rootCommand.Subcommands.Add(InspectCommand.Create());
         rootCommand.Subcommands.Add(DevCommand.Create());
 
         // Without arguments, show the help instead of silently doing nothing.
