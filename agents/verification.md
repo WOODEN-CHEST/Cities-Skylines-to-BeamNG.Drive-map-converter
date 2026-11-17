@@ -71,7 +71,7 @@ Without MCP, ask the user for screenshots and the BeamNG log (`<BeamNG user fold
 ## 4. Comparing with Cities: Skylines
 
 - Define camera poses once in CS1 world coordinates, then convert them with the converter's coordinate module so both games show the same view.
-- Top-down debug renders are the quickest way to check layout and alignment: `cstobeamng inspect <dump> --render <file.png>` draws the area of interest with +X (east) right and +Z (north, BeamNG's +Y) up, as both games show the map from above. `--area map` draws the whole map, `--area 3-5,4` a block of tiles and `--area minX,minZ,maxX,maxZ` a rectangle in metres; `--size` sets the longer side in pixels. The layers show the terrain (shaded, tinted by height) and the water with its sources; the legend in `inspect`'s output names each layer's colours. Save renders under `agents/local/scratch/<step>/` and look at them.
+- Top-down debug renders are the quickest way to check layout and alignment: `cstobeamng inspect <dump> --render <file.png>` draws the area of interest with +X (east) right and +Z (north, BeamNG's +Y) up, as both games show the map from above. `--area map` draws the whole map, `--area 3-5,4` a block of tiles and `--area minX,minZ,maxX,maxZ` a rectangle in metres; `--size` sets the longer side in pixels. The layers show the terrain (shaded, tinted by height), the water with its sources, and the networks by category, with one-way arrows and, from 1 m per pixel, the lines between the game's corners at segment ends; the legend in `inspect`'s output names each layer's colours. Save renders under `agents/local/scratch/<step>/` and look at them.
 - For appearance, use the save's own snapshot image and the user's CS1 screenshots as references.
 
 ## 5. Reporting

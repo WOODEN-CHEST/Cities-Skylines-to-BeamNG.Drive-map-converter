@@ -7,8 +7,8 @@ using CsToBeamNG.Dump.Sections;
 namespace CsToBeamNG.Cli.Tests;
 
 /// <summary>
-/// Writes small synthetic dumps with the real dump writer: a manifest and, optionally, a section no loader knows, or a
-/// coarse terrain and water.
+/// Writes small synthetic dumps with the real dump writer: a manifest and, optionally, a section no loader knows, a
+/// coarse terrain and water, or a small network.
 /// </summary>
 internal static class TestDumps
 {
@@ -34,7 +34,8 @@ internal static class TestDumps
     /// <param name="unknownSection">The name of a section with one small JSON file, or <see langword="null"/> for none.</param>
     /// <returns>The dump folder's full path.</returns>
     /// <param name="terrainAndWater">Whether to add a coarse terrain and water (<see cref="AddTerrainAndWater"/>).</param>
-    public static string Write(string folder, DumpManifest? manifest = null, bool complete = true, string? unknownSection = null, bool terrainAndWater = false)
+    /// <param name="networks">Whether to add a small network (<see cref="AddNetworks"/>).</param>
+    public static string Write(string folder, DumpManifest? manifest = null, bool complete = true, string? unknownSection = null, bool terrainAndWater = false, bool networks = false)
     {
         manifest ??= Manifest();
         manifest.Complete = false;
@@ -43,6 +44,11 @@ internal static class TestDumps
         if (terrainAndWater)
         {
             AddTerrainAndWater(writer);
+        }
+
+        if (networks)
+        {
+            AddNetworks(writer);
         }
 
         if (unknownSection is not null)
@@ -61,6 +67,79 @@ internal static class TestDumps
         manifest.Complete = complete;
         writer.WriteManifest();
         return writer.Folder;
+    }
+
+    /// <summary>
+    /// Adds a basic road from x = −100 to 100 along z = 0 with one lane, and a one-way highway from its east end to an
+    /// outside connection at x = −5000, beyond the unlocked tile (4, 4).
+    /// </summary>
+    private static void AddNetworks(DumpWriter writer)
+    {
+        var prefabs = new NetPrefabsSectionContent();
+        prefabs.Prefabs.Add(Road(1, "Basic Road", "Level2", 8, highway: false));
+        prefabs.Prefabs.Add(Road(2, "Highway", "Level5", 11, highway: true));
+        NetPrefabsSectionWriter.Write(writer, prefabs);
+
+        var nodes = new NetNodesSectionContent();
+        nodes.Nodes.Add(new NetNodeRecord { Id = 1, Flags = NetNodeRecord.CreatedFlag | NetNodeRecord.EndFlag, Prefab = 1, Position = new DumpVector3(-100, 60, 0) });
+        nodes.Nodes.Add(new NetNodeRecord { Id = 2, Flags = NetNodeRecord.CreatedFlag | NetNodeRecord.JunctionFlag | NetNodeRecord.TrafficLightsFlag, Prefab = 2, Position = new DumpVector3(100, 60, 0) });
+        nodes.Nodes.Add(new NetNodeRecord { Id = 3, Flags = NetNodeRecord.CreatedFlag | NetNodeRecord.EndFlag | NetNodeRecord.OutsideFlag, Prefab = 2, Position = new DumpVector3(-5000, 60, 0) });
+        NetNodesSectionWriter.Write(writer, nodes);
+
+        var segments = new NetSegmentsSectionContent();
+        segments.Segments.Add(Straight(1, 1, 1, 2, -100, 100, 8));
+        segments.Segments.Add(Straight(2, 2, 2, 3, 100, -5000, 11));
+        NetSegmentsSectionWriter.Write(writer, segments);
+
+        var lanes = new NetLanesSectionContent();
+        lanes.Lanes.Add(new NetLaneRecord { Id = 7, Segment = 1, Index = 0, Bezier = segments.Segments[0].Bezier, Length = 200 });
+        NetLanesSectionWriter.Write(writer, lanes);
+    }
+
+    private static NetPrefabRecord Road(uint index, string name, string level, float halfWidth, bool highway)
+    {
+        var prefab = new NetPrefabRecord
+        {
+            Index = index,
+            Name = name,
+            ClassName = name,
+            Service = "Road",
+            SubService = "None",
+            Level = level,
+            Layer = NetPrefabRecord.DefaultLayer,
+            AiType = "RoadAI",
+            Highway = highway,
+            HalfWidth = halfWidth,
+            SegmentLength = 64,
+        };
+        prefab.Lanes.Add(new NetPrefabLane { Position = -2, Width = 3, SpeedLimit = 1, Direction = highway ? NetPrefabLane.ForwardDirection : NetPrefabLane.BackwardDirection, FinalDirection = highway ? NetPrefabLane.ForwardDirection : NetPrefabLane.BackwardDirection, LaneType = NetPrefabLane.VehicleLane, VehicleType = NetPrefabLane.CarVehicles });
+        prefab.Lanes.Add(new NetPrefabLane { Position = 2, Width = 3, SpeedLimit = 1, Direction = NetPrefabLane.ForwardDirection, FinalDirection = NetPrefabLane.ForwardDirection, LaneType = NetPrefabLane.VehicleLane, VehicleType = NetPrefabLane.CarVehicles });
+        return prefab;
+    }
+
+    // A straight segment along z = 0 with its corners half the width to each side; left of the direction is +Z when
+    // going east.
+    private static NetSegmentRecord Straight(uint id, uint prefab, uint startNode, uint endNode, float startX, float endX, float halfWidth)
+    {
+        float sign = Math.Sign(endX - startX);
+        float third = (endX - startX) / 3;
+        return new NetSegmentRecord
+        {
+            Id = id,
+            Flags = 0x1,
+            Prefab = prefab,
+            StartNode = startNode,
+            EndNode = endNode,
+            StartDirection = new DumpVector3(sign, 0, 0),
+            EndDirection = new DumpVector3(-sign, 0, 0),
+            MiddlePosition = new DumpVector3((startX + endX) / 2, 60, 0),
+            Bezier = new DumpBezier3(new DumpVector3(startX, 60, 0), new DumpVector3(startX + third, 60, 0), new DumpVector3(startX + (2 * third), 60, 0), new DumpVector3(endX, 60, 0)),
+            StartLeft = new NetCorner(new DumpVector3(startX, 60, sign * halfWidth), new DumpVector3(sign, 0, 0), false),
+            StartRight = new NetCorner(new DumpVector3(startX, 60, -sign * halfWidth), new DumpVector3(sign, 0, 0), false),
+            EndLeft = new NetCorner(new DumpVector3(endX, 60, -sign * halfWidth), new DumpVector3(-sign, 0, 0), false),
+            EndRight = new NetCorner(new DumpVector3(endX, 60, sign * halfWidth), new DumpVector3(-sign, 0, 0), false),
+            AverageLength = Math.Abs(endX - startX),
+        };
     }
 
     /// <summary>

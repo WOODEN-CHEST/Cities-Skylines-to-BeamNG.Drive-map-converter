@@ -48,4 +48,33 @@ public sealed class SectionSummaryTests
 
         Assert.Equal("sea level 59.999 m; 3 of 9 cells hold water; 1 water sources", SectionSummary.Describe(water));
     }
+
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("lv-LV")]
+    public void DescribesTheNetworks(string culture)
+    {
+        using var scope = new CultureScope(culture);
+        var prefabs = new NetPrefabsSectionContent();
+        prefabs.Prefabs.Add(new NetPrefabRecord { Index = 1 });
+        prefabs.Prefabs[0].Lanes.Add(new NetPrefabLane());
+        prefabs.Prefabs[0].Lanes.Add(new NetPrefabLane());
+        prefabs.Prefabs.Add(new NetPrefabRecord { Index = 2 });
+        var nodes = new NetNodesSectionContent();
+        nodes.Nodes.Add(new NetNodeRecord { Flags = NetNodeRecord.CreatedFlag | NetNodeRecord.JunctionFlag | NetNodeRecord.TrafficLightsFlag });
+        nodes.Nodes.Add(new NetNodeRecord { Flags = NetNodeRecord.CreatedFlag | NetNodeRecord.EndFlag | NetNodeRecord.OutsideFlag });
+        nodes.Nodes.Add(new NetNodeRecord { Flags = NetNodeRecord.CreatedFlag | NetNodeRecord.MiddleFlag | NetNodeRecord.UndergroundFlag });
+        var segments = new NetSegmentsSectionContent();
+        segments.Segments.Add(new NetSegmentRecord { AverageLength = 1250.5f });
+        segments.Segments.Add(new NetSegmentRecord { AverageLength = 250 });
+        var lanes = new NetLanesSectionContent();
+        lanes.Lanes.Add(new NetLaneRecord { Length = 99.75f });
+
+        Assert.Equal("2 prefabs with 2 lanes", SectionSummary.Describe(prefabs));
+        Assert.Equal(
+            "3 nodes: 1 junctions, 0 bends, 1 ends, 1 middle nodes; 1 with traffic lights, 1 outside connections, 1 underground",
+            SectionSummary.Describe(nodes));
+        Assert.Equal("2 segments, 1.501 km long by their average lane lengths", SectionSummary.Describe(segments));
+        Assert.Equal("1 lanes, 0.1 km long", SectionSummary.Describe(lanes));
+    }
 }

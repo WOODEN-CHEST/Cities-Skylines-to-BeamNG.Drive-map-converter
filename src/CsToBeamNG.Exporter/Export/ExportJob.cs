@@ -22,6 +22,7 @@ internal sealed class ExportJob
 {
     private readonly CityReader _reader;
     private readonly TerrainReader? _terrain;
+    private readonly NetworkReader? _network;
     private readonly string _dumpsFolder;
     private readonly DateTime _startUtc;
     private readonly DumpManifest _manifest;
@@ -33,6 +34,7 @@ internal sealed class ExportJob
     private ExportJob(
         CityReader reader,
         TerrainReader? terrain,
+        NetworkReader? network,
         string dumpsFolder,
         DateTime startUtc,
         DumpManifest manifest,
@@ -42,6 +44,7 @@ internal sealed class ExportJob
     {
         _reader = reader;
         _terrain = terrain;
+        _network = network;
         _dumpsFolder = dumpsFolder;
         _startUtc = startUtc;
         _manifest = manifest;
@@ -62,6 +65,7 @@ internal sealed class ExportJob
         CityReader reader = CityReader.Create();
         var problems = new List<string>();
         TerrainReader? terrain = CreateTerrainReader(problems);
+        NetworkReader? network = CreateNetworkReader(problems);
         IList<GameModInfo> mods = ModListReader.ReadEnabledMods(problems);
         DumpManifest manifest = ManifestBuilder.CreateInitial(
             GetExporterVersion(),
@@ -69,7 +73,7 @@ internal sealed class ExportJob
             mods,
             reader.ReadCityName(),
             startUtc);
-        return new ExportJob(reader, terrain, dumpsFolder, startUtc, manifest, problems, BuildConfig.applicationVersionFull, new List<string>(probes));
+        return new ExportJob(reader, terrain, network, dumpsFolder, startUtc, manifest, problems, BuildConfig.applicationVersionFull, new List<string>(probes));
     }
 
     /// <summary>Marks the export as abandoned because the city is being closed, so <see cref="Run"/> won't read it.</summary>
@@ -144,29 +148,114 @@ internal sealed class ExportJob
         }
     }
 
+    private static NetworkReader? CreateNetworkReader(List<string> problems)
+    {
+        try
+        {
+            return NetworkReader.Create();
+        }
+        catch (InvalidOperationException e)
+        {
+            problems.Add("The networks can't be exported: " + e.Message);
+            return null;
+        }
+    }
+
     // Each section is written on its own: one that fails is left out with a warning, and the export goes on
     // (agents/conventions.md, one bad object must not abort an export).
     private void WriteSections(DumpWriter writer, ExportLog log)
     {
-        if (_terrain is null)
+        if (_terrain is not null)
         {
-            return;
+            WriteTerrainSections(writer, log, _terrain);
         }
 
+        if (_network is not null)
+        {
+            WriteNetworkSections(writer, log, _network);
+        }
+    }
+
+    private void WriteTerrainSections(DumpWriter writer, ExportLog log, TerrainReader terrainReader)
+    {
         WriteSection(log, TerrainSection.Name, () =>
         {
             var problems = new List<string>();
-            TerrainSectionContent terrain = _terrain.ReadTerrain(problems);
+            TerrainSectionContent terrain = terrainReader.ReadTerrain(problems);
             AddProblems(log, problems);
             TerrainSectionWriter.Write(writer, terrain);
             return SectionSummary.Describe(terrain);
         });
         WriteSection(log, WaterSection.Name, () =>
         {
-            WaterSectionContent water = _terrain.ReadWater();
+            WaterSectionContent water = terrainReader.ReadWater();
             WaterSectionWriter.Write(writer, water);
             return SectionSummary.Describe(water);
         });
+    }
+
+    // Objects that can't be read are skipped and counted (ObjectFailures); the sections refer to one another by id
+    // (docs/dump-format.md, Networks).
+    private void WriteNetworkSections(DumpWriter writer, ExportLog log, NetworkReader network)
+    {
+        WriteSection(log, NetPrefabsSection.Name, () =>
+        {
+            var failures = new ObjectFailures(CountKeys.NetPrefabs, "network prefabs");
+            NetPrefabsSectionContent prefabs = network.ReadPrefabs(failures);
+            ReportFailures(log, failures);
+            NetPrefabsSectionWriter.Write(writer, prefabs);
+            return SectionSummary.Describe(prefabs);
+        });
+        WriteSection(log, NetNodesSection.Name, () =>
+        {
+            var failures = new ObjectFailures(CountKeys.NetNodes, "network nodes");
+            NetNodesSectionContent nodes = network.ReadNodes(failures);
+            ReportFailures(log, failures);
+            NetNodesSectionWriter.Write(writer, nodes);
+            return SectionSummary.Describe(nodes);
+        });
+        WriteSection(log, NetSegmentsSection.Name, () =>
+        {
+            var failures = new ObjectFailures(CountKeys.NetSegments, "network segments");
+            NetSegmentsSectionContent segments = network.ReadSegments(failures);
+            ReportFailures(log, failures);
+            NetSegmentsSectionWriter.Write(writer, segments);
+            return SectionSummary.Describe(segments);
+        });
+        WriteSection(log, NetLanesSection.Name, () =>
+        {
+            var failures = new ObjectFailures(CountKeys.NetLanes, "network lanes");
+            NetLanesSectionContent lanes = network.ReadLanes(failures);
+            ReportFailures(log, failures);
+            NetLanesSectionWriter.Write(writer, lanes);
+            return SectionSummary.Describe(lanes);
+        });
+    }
+
+    private void ReportFailures(ExportLog log, ObjectFailures failures)
+    {
+        if (failures.Count == 0)
+        {
+            return;
+        }
+
+        foreach (string detail in failures.Details)
+        {
+            log.Warning(detail);
+        }
+
+        if (failures.Count > failures.Details.Count)
+        {
+            log.Warning(string.Format(
+                CultureInfo.InvariantCulture,
+                "{0} more {1} couldn't be exported; only the first {2} are described.",
+                failures.Count - failures.Details.Count,
+                failures.Description,
+                failures.Details.Count));
+        }
+
+        _manifest.FailureCounts[failures.CountKey] = failures.Count;
+        _manifest.Warnings.Add(failures.Summary!);
     }
 
     private void WriteSection(ExportLog log, string name, Func<string> write)

@@ -12,6 +12,12 @@ internal static class CountKeys
     /// <summary>Network lanes (<c>NetManager.m_lanes</c>).</summary>
     public const string NetLanes = "netLanes";
 
+    /// <summary>
+    /// Network prefabs that nodes and segments use. Only a <c>failureCounts</c> key: prefabs aren't objects in the city,
+    /// so <c>counts</c> doesn't have it.
+    /// </summary>
+    public const string NetPrefabs = "netPrefabs";
+
     /// <summary>Buildings (<c>BuildingManager.m_buildings</c>), sub-buildings included.</summary>
     public const string Buildings = "buildings";
 

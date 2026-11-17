@@ -2,14 +2,52 @@
 
 ## Data model
 
-- **Node:** position, flags (junction, bend, end, middle, traffic lights, outside connection, underground, ...), elevation, up to 8 connected segments, and an optional node building (e.g. pillars).
-- **Segment:** start and end node, start and end direction (tangents), flags, a `NetInfo` prefab and lanes. The centre line is a cubic Bézier built from the node positions and directions.
-- **Lane:** a `NetLane` with its own world-space Bézier (`m_bezier` [verified]), length and flags. Its `NetInfo.Lane` gives the position offset, width, direction, lane type, vehicle types and speed limit (`m_speedLimit` [verified]).
-- **NetInfo (prefab):**
-  - geometry: half width (`m_halfWidth`), pavement width (`m_pavementWidth`), segment length (`m_segmentLength`) [verified names];
-  - content: lanes, segment meshes, node meshes, lane props;
-  - behaviour: an AI (road, bridge, tunnel, slope, rail, pedestrian, ...) and elevation variants.
-- **Speed units:** 1.0 = 50 km/h. [community: TM:PE convention; verify]
+[verified 2026-11-17, game 1.21.1-f9: fields, enums and methods read in the IL (`monodis`, locally); behaviour checked numerically on CityPalma's dump `san-palma_20261117-214514` (2,477 nodes, 2,482 segments, 8,638 lanes, 28 prefabs), with the scratch checks of step 1.3]
+
+- **Buffers and ids:** `NetManager.m_nodes`, `m_segments` and `m_lanes` hold the objects (vanilla lengths 32,768, 36,864 and 262,144); an object's id is its index, and id 0 is never used, so 0 means "none". Live entries have the `Created` flag (0x1). The dump stores the objects in the sections `net-nodes`, `net-segments`, `net-lanes` and their prefabs in `net-prefabs` ([dump format](../dump-format.md#networks)).
+- **Node (`NetNode`):**
+  - `m_position`; `m_flags` (`NetNode.Flags`, 32 bits: 0x1 created, 0x10 end, 0x20 middle, 0x40 bend, 0x80 junction, 0x400 outside connection, 0x4000 on the ground, 0x80000 underground, 0x100000 transition, 0x200000 level crossing, 0x800000 traffic lights, 0x80000000 traffic lights switched by the player, among others); `m_flags2` (`Flags2`: bollards, road-end and event bits). The property `flags` (`FlagsLong`) combines both, with `m_flags2` in the upper 32 bits.
+  - `m_segment0` to `m_segment7` (`GetSegment(i)`): eight segment slots, 0 when empty. `m_building`: the node's building, such as a pillar or pylon. `m_infoIndex`: the prefab's index in `PrefabCollection<NetInfo>`.
+  - `m_heightOffset` (byte, 1/64 m): added to the corners at this node when they are computed with the height offset (Corners).
+  - `m_elevation` (byte): the elevation the network tool gave the node, in metres: 12, 18 or 24 on CityPalma's elevated roads, tracks and ramps, which lie 5.3 to 24.6 m above today's ground, most within 1.5 m of the value. So it is the tool's setting at the time, not the current height above the ground.
+  - CityPalma: 176 junctions, 90 bends, 56 dead ends, 2,138 middle nodes (between two segments of one road); 7 with traffic lights; 17 outside connections, at the map's edges.
+- **Segment (`NetSegment`):**
+  - `m_startNode`, `m_endNode`; `m_startDirection`, `m_endDirection`: the centre line's directions at the nodes, both pointing from the node into the segment.
+  - `m_flags` (`NetSegment.Flags`: 0x1 created, 0x10 invert, others for traffic, crossings, stops, bans and names); `m_flags2`; `m_infoIndex`; `m_lanes`, the first lane of its lane list.
+  - `m_middlePosition`: the average of the midpoints of the two edge curves (`UpdateBounds`). `m_averageLength`: the mean of its lanes' `m_length` (`NetAI.UpdateLanes`); in CityPalma within 15 µm for every segment except one bus line's.
+  - **Centre curve:** the game stores none; where it needs one (for example `GetClosestPositionAndDirection`) it builds a cubic Bézier from node to node: a and d are the nodes' positions, b and c come from `NetSegment.CalculateMiddlePoints(a, m_startDirection, d, m_endDirection, smoothStart, smoothEnd)`, smooth at an end whose node is a middle node. The exporter calls these methods the same way.
+- **Lane (`NetLane`):** `m_bezier` (the lane's curve), `m_length`, `m_curve`, `m_segment`, `m_flags` (16 bits: 0x1 created, 0x4 inverted, 0x10/0x20/0x40 the lane's arrows: straight on, left, right; 0x400/0x800 yield), `m_nextLane`. A segment's lanes form a list, `m_lanes` then `m_nextLane`, in the order of its prefab's `NetInfo.m_lanes`, so a lane's place in the list is its index in the prefab (Lanes).
+- **Prefab (`NetInfo`):** dimensions (`m_halfWidth`, `m_pavementWidth`, `m_segmentLength`, `m_surfaceLevel`), terrain flags (`m_createPavement`, `m_createGravel`, `m_createRuining`, `m_flattenTerrain`, `m_lowerTerrain`, `m_clipTerrain`, `m_followTerrain`, `m_flatJunctions`), the item class `m_class`, the lanes `m_lanes`, the AI `m_netAI`, meshes and lane props (Prefabs).
+- **Speed units:** `NetInfo.Lane.m_speedLimit` is in units of 50 km/h. [verified: the road tooltip (`RoadBaseAI.GetLocalizedTooltip`, text `AIINFO_SPEED`) shows round(10 · `m_averageVehicleLaneSpeed`) · 5, where `InitializePrefab` makes `m_averageVehicleLaneSpeed` the mean limit of the lanes for cars, trams and trolleybuses (vehicle type & 0x10041): the limit times 50. The unit's name is in the game's encoded locale files, which weren't read; km/h is the convention of mods such as TM:PE [community].] CityPalma: the two-lane road 0.8 (40 km/h), the four-lane road 1 (50), the highway 2 (100), the highway ramp 1.6 (80), train tracks 3 (150), pedestrian lanes 0.25.
+
+### Corners
+
+[verified 2026-11-17: IL of `NetSegment.CalculateCorner` and its callers; CityPalma's dump]
+
+- `segment.CalculateCorner(segmentID, heightOffset, start, leftSide, out position, out direction, out smooth)` gives the corner where one edge of the segment's surface meets the start or end node, and the edge's direction there, pointing into the segment. It calls a static overload with the prefab, the node positions and directions.
+- **Sides:** `leftSide` is seen from the corner's own node, looking into the segment. The left offset is the normalised cross product of the direction with up, (−dZ, 0, dX), times `m_halfWidth`; the right one its negative. Seen from above with +X east and +Z north, this is the left of the direction: west when heading north. So the start's left corner and the end's right corner lie on the same side of the segment.
+- **Height:** the corner lies at its node's height; with `heightOffset` the node's `m_heightOffset` / 64 m is added. The renderer (How the game renders them) and `NetAI.UpdateLanes` use `heightOffset` true, and so does the exporter.
+- **Position:** at a middle node or a dead end the corner lies `m_halfWidth` across the (smoothed) direction from the node. At junctions and bends the game moves it back along the edge curve, by at least the AI's minimum corner offset, to clear the other segments. CityPalma: the two corners at an end are exactly twice `m_halfWidth` apart at 4,276 middle-node ends and 56 dead ends (within 0.01 %), but 0.99 to 1.48 times at junctions and up to 1.33 times at bends.
+- `smooth` is whether the corner's node is a middle node; `UpdateLanes` passes the right-side calls' values on to `CalculateMiddlePoints`.
+
+### Lanes
+
+[verified 2026-11-17: IL of `NetAI.UpdateLanes`, `NetLane.UpdateLength`, `NetInfo.InitializePrefab` and `NetSegment.CountLanes`; CityPalma's dump]
+
+- **Curves:** `NetAI.UpdateLanes` builds each lane from the four corners. With t = `position` / (2 · `m_halfWidth`) + 0.5, and 1 − t on an inverted segment: a = startLeft + (startRight − startLeft) · t, d = endRight + (endLeft − endRight) · t, the directions interpolated the same way; a and d are raised by the lane's `m_verticalOffset`; b and c come from `CalculateMiddlePoints` with the corners' smoothness. So a lane always runs from the segment's start to its end, and an inverted segment mirrors its lanes. Rebuilt this way from the dumped corners, all 8,638 lanes of CityPalma match the game's curves within 0.5 mm.
+- **Direction:** `NetInfo.Lane.m_finalDirection` is `m_direction`, reversed for vehicle, parking, cargo and transport-vehicle lanes (lane type & 0x35) in cities that drive on the left (`InitializePrefab`). On a segment the game reverses it once more if the segment is inverted (`CountLanes`); forward is from the start node to the end node. `UpdateLanes` sets the lane flag 0x4 on every lane of a city that drives on the left.
+- **Length:** `NetLane.UpdateLength` sets `m_length` to the length of the curve's control polygon, |b − a| + |c − b| + |d − c|, which exceeds the curve's own length where it bends, and `m_curve` to (π/2) · (1 − the dot product of the directions at the ends) / `m_length`. CityPalma: true for all lanes but one of a bus line (within 1 mm), whose AI sets its lengths from the line's path.
+
+### Prefabs
+
+[verified 2026-11-17: IL; CityPalma's 28 prefabs]
+
+- **Item class** (`m_class`, an `ItemClass`): service, sub-service, level and layers. Roads have the service `Road`: the two-lane roads' class `Small Road` has level 2, `Medium Road` level 3, `Highway` (highways, ramps, toll roads, the map's highway connections) level 5. Large roads are presumably level 4. [inferred]
+- **Layers** (`ItemClass.Layer`, bits): 0x1 default (roads, tracks, paths, power lines, decorative walls), 0x2 water pipes, 0x4 transport lines, 0x8 metro tunnels, 0x10 aircraft routes, 0x20 ship routes, and more for blimps, helicopters, fishing boats and ferries.
+- **AI:** `NetAI.IsHighway()` returns `RoadBaseAI.m_highwayRules`; `IsBridge()` is true for the road and pedestrian bridge AIs; `IsTunnel()` only for `RoadTunnelAI`; `IsUnderground()` for the road, track, metro and pedestrian tunnel AIs and pedestrian paths built underground; `IsOverground()` for bridge AIs, monorails and cable cars. They are plain getters.
+- **Elevation variants:** `RoadAI`, `TrainTrackAI`, `MetroTrackAI`, `PedestrianPathAI` and `PedestrianWayAI` have the fields `m_elevatedInfo`, `m_bridgeInfo`, `m_slopeInfo` and `m_tunnelInfo` (`RoadAI` also `m_connectedInfo`). The exporter reads them by name, so mods' AIs derived from these are covered.
+- **Not only roads:** water pipes (`WaterPipeAI`), power lines (`PowerLineAI`), decorative walls, the routes of ships and aircraft (`ShipPathAI`, `FlightPathAI`, whose "connection" paths have a pedestrian lane too), and transport lines are networks as well. A transport line's prefab is `TransportInfo.m_netInfo`, such as `Bus Line` with `TransportLineAI` on layer 0x4; its nodes and segments are the line's stops and legs.
+- **Categories:** the converter sorts prefabs for its debug render (`NetCategories`): only the default and metro-tunnel layers, never transport lines; roads by `IsHighway()` and level (levels 1 and 2 local, higher arterial); tracks by rail vehicle lanes; paths by pedestrian or bicycle lanes; the rest is not drawn.
 
 ## Mesh conventions
 
@@ -161,4 +199,6 @@ Vanilla network meshes are CPU-readable (`Mesh.isReadable` true): segment, node 
 - Bridges, tunnels, slopes, rails, paths and other AIs: not probed; the functions are the same, but their prefabs and flags differ.
 - Segments whose meshes follow the terrain (`m_requireHeightMap`): none were probed.
 - Workshop network meshes may not be readable; vanilla ones are.
-- Speed-limit units (verify 1.0 = 50 km/h).
+- `m_elevation`: what exactly it is relative to (the ground when the node was built, or the raw terrain), and how the game uses it.
+- The large roads' class level (presumably 4); none in the dumps so far.
+- How `TransportLineAI` computes its lanes' lengths.

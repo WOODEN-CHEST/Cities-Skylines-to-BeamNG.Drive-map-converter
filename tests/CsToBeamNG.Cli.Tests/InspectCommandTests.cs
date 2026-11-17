@@ -52,7 +52,7 @@ public sealed class InspectCommandTests : IDisposable
 
             Sections
               none
-              Not in the dump: terrain, water
+              Not in the dump: terrain, water, net-prefabs, net-nodes, net-segments, net-lanes
 
             Area of interest
               Bounds:         x -960 to 960, z -960 to 960 (1920 × 1920 m)
@@ -127,10 +127,47 @@ public sealed class InspectCommandTests : IDisposable
             + "    water sources: 1: 1 natural, 0 of buildings, 0 of water treatment\n",
             output,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("Not in the dump", output, StringComparison.Ordinal);
+        Assert.Contains("  Not in the dump: net-prefabs, net-nodes, net-segments, net-lanes\n", output, StringComparison.Ordinal);
         Assert.Contains("\n    terrain: the ground the game draws", output, StringComparison.Ordinal);
         Assert.Contains("\n    water: water at least 0.31 m deep", output, StringComparison.Ordinal);
         Assert.Equal((64, 64), PngSize(image));
+    }
+
+    [Fact]
+    public void ReportsAndDrawsTheNetworks()
+    {
+        using var scope = new CultureScope("lv-LV");
+        string folder = TestDumps.Write(_temp.PathOf("dump"), networks: true);
+        string image = _temp.PathOf("networks.png");
+
+        int exitCode = InspectCommand.Inspect(new InspectRequest(folder) { RenderPath = image, RenderSize = 128 }, _output, _error);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(_error.ToString());
+        string output = Output();
+        Assert.Contains(
+            "    prefabs: 2, with 4 lanes\n"
+            + "    by category: 1 highway, 0 arterial, 1 local, 0 path, 0 rail, 0 other\n",
+            output,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "    nodes: 3: 1 junctions, 0 bends, 2 ends, 0 middle nodes\n"
+            + "    traffic lights: at 1 nodes\n"
+            + "    outside connections: 1\n"
+            + "    off the ground: 0 elevated, 0 underground\n"
+            + "    content: 2 nodes within x -100 to 100, z 0 to 0\n",
+            output,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "    segments: 2, 5.3 km of centre lines\n"
+            + "    by category: highway 5.1 km, arterial 0 km, local 0.2 km, path 0 km, rail 0 km, other 0 km\n"
+            + "    one-way: 1 segments\n",
+            output,
+            StringComparison.Ordinal);
+        Assert.Contains("    lanes: 1, 0.2 km by the game's lengths\n", output, StringComparison.Ordinal);
+        Assert.Contains("  Bounds:         x -600 to 600, z -500 to 500 (1200 × 1000 m)\n", output, StringComparison.Ordinal);
+        Assert.Contains("\n    networks: segments as bands of their width", output, StringComparison.Ordinal);
+        Assert.Equal((128, 107), PngSize(image));
     }
 
     [Fact]

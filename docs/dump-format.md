@@ -201,6 +201,8 @@ The exporter counts the entries in the game's instance buffers whose `Created` f
 
 Readers accept keys they don't know, and missing keys, which mean the count is unknown.
 
+`failureCounts` uses the same keys, plus `netPrefabs` for network prefabs the exporter couldn't describe (prefabs aren't objects in the city, so `counts` has no such key).
+
 ### `sections`
 
 | Field | Type | Required | Meaning |
@@ -313,8 +315,12 @@ The writer computes the text of floating-point numbers itself, with exact intege
 |---|---|---|---|
 | [`terrain`](#terrain-01) | 0.1 | Terrain heights: raw and final on the 16 m grid, 4 m detail heights of some tiles | step 1.2 |
 | [`water`](#water-01) | 0.1 | Sea level, the water simulation's cells, water sources | step 1.2 |
+| [`net-prefabs`](#net-prefabs-01) | 0.1 | The network prefabs that nodes and segments use: class, AI, dimensions, terrain flags, elevation variants, lanes | step 1.3 |
+| [`net-nodes`](#net-nodes-01) | 0.1 | Network nodes: position, flags, elevation, segments, building, prefab | step 1.3 |
+| [`net-segments`](#net-segments-01) | 0.1 | Network segments: nodes, directions, flags, prefab, the centre curve and the corners the game computes | step 1.3 |
+| [`net-lanes`](#net-lanes-01) | 0.1 | The segments' lanes: curve, length, flags, index in the prefab | step 1.3 |
 
-Steps 1.3 and 1.4 add networks, buildings, props and trees.
+Step 1.4 adds buildings, props and trees.
 
 To add a section:
 
@@ -343,6 +349,10 @@ Sections that sample the map on a regular grid describe it with a grid object in
 | `resolution` | integer | The number of points along each side, 2 to 32,768. |
 
 Point (i, j) lies at X = `originX` + `spacing` · i and Z = `originZ` + `spacing` · j, so i grows towards +X (east) and j towards +Z (north). Grid files store one record per point, row by row: point (i, j) is record j · `resolution` + i. Readers take the geometry from the file rather than assuming the game's: a grid whose files don't hold `resolution`² records is damaged.
+
+### Vectors and curves
+
+Record layouts store a position or direction as three consecutive `f32` fields, X, Y and Z (called `x`, `y`, `z` with a prefix below), in the game's coordinates ([Data](#data)). A cubic Bézier curve is twelve consecutive `f32` fields: its control points a, b, c and d, each as X, Y, Z. The curve starts at a, ends at d and is pulled towards b and c, as the game's `ColossalFramework.Math.Bezier3` holds it. In the Dump library these are `DumpVector3` and `DumpBezier3`.
 
 ### `terrain` (0.1)
 
@@ -450,6 +460,161 @@ Record type `waterSource`, 52 bytes:
 
 Readers skip, with a warning, a source whose position isn't finite.
 
+### Networks
+
+Four sections describe the game's networks: roads, highways, tracks, paths, and also pipes, power lines, transport lines and the routes of ships and aircraft. The exporter writes them since step 1.3 ([research: CS1 networks](research/cs1-networks.md#data-model)). They refer to one another by the game's ids: a node lists its segments, a segment its nodes, a lane its segment, and nodes and segments their prefab by its index in the game's prefab collection. Ids are the objects' indices in the game's buffers, so 0 is never an object and means "none". All four come from one simulation-thread action, so they are consistent; a section whose export failed is absent, and readers then treat references to it as unknown. Objects the exporter couldn't read are missing and counted in `failureCounts`.
+
+#### `net-prefabs` (0.1)
+
+The network prefabs (`NetInfo`) that nodes and segments use.
+
+| File | Content |
+|---|---|
+| `prefabs.json` | the prefabs, ordered by index |
+
+`recordCount`: the number of prefabs.
+
+```json
+{
+  "prefabs": [
+    {
+      "index": 0,
+      "name": "Basic Road",
+      "class": { "name": "Small Road", "service": "Road", "subService": "None", "level": "Level2", "layer": 1 },
+      "ai": { "type": "RoadAI", "highway": false, "bridge": false, "tunnel": false, "underground": false, "overground": false },
+      "halfWidth": 8,
+      "pavementWidth": 3,
+      "segmentLength": 64,
+      "surfaceLevel": -0.3,
+      "terrain": {
+        "createPavement": true, "createGravel": false, "createRuining": false, "flattenTerrain": true,
+        "lowerTerrain": false, "clipTerrain": true, "followTerrain": true, "flatJunctions": true
+      },
+      "variants": { "elevated": "Basic Road Elevated", "bridge": "Basic Road Bridge", "slope": "Basic Road Slope", "tunnel": "Basic Road Tunnel" },
+      "lanes": [
+        { "position": -7, "width": 2, "verticalOffset": 0, "stopOffset": 0, "speedLimit": 0.25,
+          "direction": 3, "finalDirection": 3, "laneType": 2, "vehicleType": 0, "stopType": 1 }
+      ]
+    }
+  ]
+}
+```
+
+All properties are required, except the members of `variants`.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `index` | integer | The prefab's index in the game's prefab collection (`m_infoIndex` of nodes and segments), unique in the file. |
+| `name` | string | The prefab's name. Workshop prefabs have names such as `123456789.My Road_Data`. |
+| `class.name` | string | The name of the prefab's item class, such as `Small Road`, `Medium Road`, `Highway`. |
+| `class.service`, `class.subService`, `class.level` | string | The item class's service, sub-service and level, as the game names them (`ItemClass.Service`, `SubService`, `Level`), such as `Road`, `PublicTransportTrain`, `Level2`. Readers keep names they don't know. |
+| `class.layer` | integer | The item class's layers, the raw value of `ItemClass.Layer`. Bits: 0x1 default (networks on, above and below the ground), 0x2 water pipes, 0x4 transport lines, 0x8 metro tunnels; the routes of aircraft (0x10), ships (0x20) and others have layers of their own. |
+| `ai.type` | string | The full type name of the prefab's AI, such as `RoadAI`, `TrainTrackBridgeAI`, `TransportLineAI`; empty if it has none. |
+| `ai.highway`, `ai.bridge`, `ai.tunnel`, `ai.underground`, `ai.overground` | boolean | What the AI's `IsHighway()`, `IsBridge()`, `IsTunnel()`, `IsUnderground()` and `IsOverground()` return. `highway` means highway rules apply. |
+| `halfWidth` | number (32-bit) | Half the network's width, in metres: its corners lie this far to each side of the centre line. |
+| `pavementWidth` | number (32-bit) | The pavement's width on each side, in metres. |
+| `segmentLength` | number (32-bit) | The length of the prefab's segment mesh, in metres. |
+| `surfaceLevel` | number (32-bit) | The height of the driving surface relative to the nodes, in metres; −0.3 for roads with pavements. |
+| `terrain.*` | boolean | How the network shapes the terrain: `NetInfo.m_createPavement`, `m_createGravel`, `m_createRuining` (paint), `m_flattenTerrain`, `m_lowerTerrain`, `m_clipTerrain`, `m_followTerrain`, `m_flatJunctions`. |
+| `variants.elevated`, `.bridge`, `.slope`, `.tunnel` | string | The names of the prefab's elevated, bridge, slope and tunnel versions, from its AI's `m_elevatedInfo`, `m_bridgeInfo`, `m_slopeInfo` and `m_tunnelInfo`; absent where the AI has no such version. |
+| `lanes` | array of objects | The prefab's lanes, in the game's order; a lane record's `index` refers to this order. |
+| `lanes[].position` | number (32-bit) | The lane's centre across the segment, in metres from the centre line; negative is left, looking from the start node to the end node, except on an inverted segment, which mirrors its lanes. |
+| `lanes[].width` | number (32-bit) | The lane's width, in metres. |
+| `lanes[].verticalOffset` | number (32-bit) | The lane's height above the corners, in metres; −0.3 for the car lanes of roads with pavements. |
+| `lanes[].stopOffset` | number (32-bit) | How far from the lane's centre vehicles stop, in metres. |
+| `lanes[].speedLimit` | number (32-bit) | The speed limit in the game's units: 1 is 50 km/h ([research](research/cs1-networks.md#lanes)). |
+| `lanes[].direction` | integer | The lane's direction as the prefab defines it, the raw value of `NetInfo.Direction`: 1 forward (from the start node towards the end node), 2 backward, 3 both; higher bits (4, 8: "avoid") are for the path finder. |
+| `lanes[].finalDirection` | integer | The direction the game uses: `direction`, reversed for vehicle and parking lanes in cities that drive on the left. On a segment with the inverted flag, forward and backward swap. |
+| `lanes[].laneType` | integer | The raw value of `NetInfo.LaneType`. Bits: 0x1 vehicles, 0x2 pedestrians, 0x4 parking, 0x8 public transport (stops), 0x10 cargo vehicles, 0x20 transport vehicles. |
+| `lanes[].vehicleType` | integer | The vehicles allowed, the raw value of `VehicleInfo.VehicleType`. Bits: 0x1 cars, 0x2 metros, 0x4 trains, 0x8 ships, 0x10 aircraft, 0x20 bicycles, 0x40 trams, 0x800 monorails, 0x1000 cable cars. |
+| `lanes[].stopType` | integer | The vehicles that stop on the lane, a `VehicleInfo.VehicleType` like `vehicleType`. |
+
+Prefabs the game hasn't loaded (a missing asset) aren't listed; nodes and segments may then refer to an index the file lacks, which readers report.
+
+#### `net-nodes` (0.1)
+
+Every node of the networks: ends, bends and junctions of roads, tracks, paths, pipes and the rest (`NetNode`).
+
+| File | Content |
+|---|---|
+| `nodes.bin` | records of type `netNode`, ordered by id |
+
+`recordCount`: the number of nodes, which equals `counts.netNodes` less `failureCounts.netNodes`.
+
+Record type `netNode`, 68 bytes:
+
+| Offset | Type | Field | Unit | Meaning |
+|---|---|---|---|---|
+| 0 | u32 | `id` | | The node's id. |
+| 4 | u32 | `flags` | | `NetNode.m_flags`, raw. Bits used: 0x1 created, 0x10 dead end, 0x20 middle (one segment continues into the next), 0x40 bend, 0x80 junction, 0x400 outside connection, 0x4000 on the ground, 0x80000 underground, 0x100000 transition (with underground: a tunnel portal), 0x200000 level crossing, 0x800000 traffic lights, 0x80000000 traffic lights switched by the player. |
+| 8 | u32 | `flags2` | | `NetNode.m_flags2`, raw. |
+| 12 | u32 | `prefab` | | The index of the node's prefab in `net-prefabs`. |
+| 16 | f32 | `x` | m | The node's position. |
+| 20 | f32 | `y` | m | |
+| 24 | f32 | `z` | m | |
+| 28 | u32 | `building` | | The id of the node's building, such as a pillar or a pylon; 0 for none. |
+| 32 | u32 × 8 | `segment0` … `segment7` | | The ids of the connected segments in the game's eight slots; 0 is an empty slot. |
+| 64 | u8 | `elevation` | m | The elevation the network tool gave the node: for elevated and underground networks, roughly the height above (or the depth below) the ground at the time. 0 on the ground. |
+| 65 | u8 | `heightOffset` | 1/64 m | A height the game adds to the corners at this node ([`net-segments`](#net-segments-01)). |
+| 66 | pad 2 | | | |
+
+#### `net-segments` (0.1)
+
+Every segment of the networks (`NetSegment`), with the geometry the game derives for it: the centre curve and the four corners.
+
+| File | Content |
+|---|---|
+| `segments.bin` | records of type `netSegment`, ordered by id |
+
+`recordCount`: the number of segments, which equals `counts.netSegments` less `failureCounts.netSegments`.
+
+The corners are what the game's `NetSegment.CalculateCorner` returns, with the node's height offset, as the renderer and the lanes use them ([research: Corners](research/cs1-networks.md#corners)): where an edge of the segment's surface meets its node, and the edge's direction there, pointing into the segment. A corner's side is seen from its own node, looking into the segment, so the start's left corner and the end's right corner lie on the same side: the left one, looking from the start node to the end node. At middle nodes and dead ends the corners lie half the prefab's width to each side of the node; at junctions and bends the game moves them back along the edges.
+
+Record type `netSegment`, 212 bytes:
+
+| Offset | Type | Field | Unit | Meaning |
+|---|---|---|---|---|
+| 0 | u32 | `id` | | The segment's id. |
+| 4 | u32 | `flags` | | `NetSegment.m_flags`, raw. Bits used: 0x1 created, 0x10 inverted (the lanes are mirrored and their directions reversed). |
+| 8 | u32 | `flags2` | | `NetSegment.m_flags2`, raw. |
+| 12 | u32 | `prefab` | | The index of the segment's prefab in `net-prefabs`. |
+| 16 | u32 | `startNode` | | The id of the start node. |
+| 20 | u32 | `endNode` | | The id of the end node. |
+| 24 | f32 × 3 | `startDirectionX`, `Y`, `Z` | | The centre line's direction at the start node, pointing into the segment (`m_startDirection`). |
+| 36 | f32 × 3 | `endDirectionX`, `Y`, `Z` | | The centre line's direction at the end node, pointing into the segment (`m_endDirection`). |
+| 48 | f32 × 3 | `middleX`, `Y`, `Z` | m | The middle of the segment's surface (`m_middlePosition`). |
+| 60 | f32 × 12 | `bezier` | m | The centre line from the start node to the end node, as the game computes it: from node to node with `NetSegment.CalculateMiddlePoints`, smooth at middle nodes. |
+| 108 | f32 × 6 | `startLeftX`, `Y`, `Z`, `startLeftDirectionX`, `Y`, `Z` | m | The start's left corner and the edge's direction there. |
+| 132 | f32 × 6 | `startRight…` | m | The start's right corner and direction. |
+| 156 | f32 × 6 | `endLeft…` | m | The end's left corner and direction, seen from the end node. |
+| 180 | f32 × 6 | `endRight…` | m | The end's right corner and direction, seen from the end node. |
+| 204 | f32 | `averageLength` | m | The game's average length of the segment's lanes (`m_averageLength`). |
+| 208 | u8 | `cornerFlags` | | The smoothness the game returned with each corner: 0x1 start left, 0x2 start right, 0x4 end left, 0x8 end right. Set where the corner's node is a middle node. |
+| 209 | pad 3 | | | |
+
+#### `net-lanes` (0.1)
+
+Every lane of the segments (`NetLane`). A lane's settings, such as its type, direction and speed limit, are those of lane `index` of its segment's prefab in `net-prefabs`.
+
+| File | Content |
+|---|---|
+| `lanes.bin` | records of type `netLane`, ordered by id |
+
+`recordCount`: the number of lanes, which equals `counts.netLanes` less `failureCounts.netLanes`.
+
+Record type `netLane`, 64 bytes:
+
+| Offset | Type | Field | Unit | Meaning |
+|---|---|---|---|---|
+| 0 | u32 | `id` | | The lane's id. |
+| 4 | u32 | `segment` | | The id of the lane's segment. |
+| 8 | u16 | `index` | | The lane's index among its prefab's lanes: its place in the segment's lane list. |
+| 10 | u16 | `flags` | | `NetLane.m_flags`, raw. Bits used: 0x1 created, 0x4 set up for left-hand traffic, 0x10, 0x20, 0x40 the lane's arrows: straight on, left, right. |
+| 12 | f32 × 12 | `bezier` | m | The lane's curve. It always runs from the segment's start towards its end; the direction of travel comes from the prefab's lane and the segment's flags. |
+| 60 | f32 | `length` | m | The lane's length as the game computes it: the length of the curve's control polygon (`m_length`). |
+
+Readers skip, with a warning, nodes, segments and lanes that have a value that isn't finite, or an id that was listed already; they keep objects whose references the other sections lack and report them.
+
 ### Template: `<name>` (0.1)
 
 What the section contains and where in the game it comes from, linking the research notes. Which step writes it.
@@ -487,7 +652,7 @@ It is UTF-8 text with one line per message: the UTC time to the millisecond, the
 | String tables | `StringTableBuilder`; `StringTable` (.NET 10) | `CsToBeamNG.Dump` |
 | JSON | `JsonWriter` | `CsToBeamNG.Dump.Json` |
 | Versions and errors | `DumpFormat`, `DumpVersion`, `DumpException` | `CsToBeamNG.Dump` |
-| Sections | per section: `TerrainSection` (names and sizes), `TerrainSectionContent`, `TerrainSectionWriter`, `TerrainSectionReader` (.NET 10); the same for `Water…`; `GridGeometry` | `CsToBeamNG.Dump.Sections` |
+| Sections | per section: `TerrainSection` (names and sizes), `TerrainSectionContent`, `TerrainSectionWriter`, `TerrainSectionReader` (.NET 10); the same for `Water…`, `NetPrefabs…`, `NetNodes…`, `NetSegments…` and `NetLanes…`; records `WaterSourceRecord`, `NetPrefabRecord`, `NetPrefabLane`, `NetNodeRecord`, `NetSegmentRecord`, `NetCorner`, `NetLaneRecord`; `GridGeometry`, `DumpVector3`, `DumpBezier3` | `CsToBeamNG.Dump.Sections` |
 
 Readers report a dump they can't read with a `DumpException` whose `Kind` says why: `NotFound`, `Corrupt`, `Incompatible` or `Incomplete`. The message names the file and, for JSON, the location in it, such as `$.sections[2].version`.
 
@@ -499,3 +664,4 @@ Readers report a dump they can't read with a `DumpException` whose `Kind` says w
 |---|---|---|
 | Format 0.1 | 2026-11-17 | First version (step 0.3): layout, names, manifest, record files, string tables, JSON conventions. Completed before the first dump (step 0.4): the `counts` keys, the dump folder's location and name, the content of `game.mods`. The `probes` folder for developer probes, outside the format (step 0.7). |
 | `terrain` 0.1, `water` 0.1 | 2026-11-17 | First sections (step 1.2), with the [grid](#grids) convention. |
+| `net-prefabs` 0.1, `net-nodes` 0.1, `net-segments` 0.1, `net-lanes` 0.1 | 2026-11-17 | The networks (step 1.3), with the [vector and curve](#vectors-and-curves) convention; the `netPrefabs` failure key. |

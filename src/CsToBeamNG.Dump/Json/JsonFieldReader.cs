@@ -138,6 +138,20 @@ internal sealed class JsonFieldReader
         return value;
     }
 
+    /// <summary>A whole number from 0 to <see cref="uint.MaxValue"/>, such as an id or the raw value of a set of flags.</summary>
+    public uint RequiredUInt32(JsonElement parent, string name, string parentPath)
+    {
+        JsonElement element = Required(parent, name, parentPath);
+        if (element.ValueKind != JsonValueKind.Number || !element.TryGetUInt32(out uint value))
+        {
+            throw Error(
+                Child(parentPath, name),
+                string.Create(CultureInfo.InvariantCulture, $"expected a whole number from 0 to {uint.MaxValue}, found {Describe(element)}"));
+        }
+
+        return value;
+    }
+
     /// <summary>A finite number, read as a 32-bit float (docs/dump-format.md, JSON files).</summary>
     public float RequiredSingle(JsonElement parent, string name, string parentPath)
     {

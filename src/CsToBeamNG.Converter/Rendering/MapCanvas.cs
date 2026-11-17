@@ -14,6 +14,9 @@ public sealed class MapCanvas
     /// <summary>The thickest outline <see cref="StrokeRect"/> draws, in pixels.</summary>
     public const int MaxLineWidthPixels = 64;
 
+    /// <summary>The most corners a polygon for <see cref="FillPolygon"/> and <see cref="BlendPolygon"/> may have.</summary>
+    public const int MaxPolygonCorners = 64;
+
     // Pixel indices are clamped to this range before converting to int. It is far enough outside any image that
     // an edge clamped to it, and an outline band along that edge, stay outside too.
     private const double PixelIndexLimit = 4.0 * RenderView.MaxSizePixels;
@@ -88,6 +91,20 @@ public sealed class MapCanvas
         FillPixels(x0, y0, Math.Min(x0 + widthPixels, x1), y1, color);
         FillPixels(Math.Max(x1 - widthPixels, x0), y0, x1, y1, color);
     }
+
+    /// <summary>
+    /// Fills a polygon: every pixel whose centre lies inside it, by the even-odd rule, so that polygons sharing an edge
+    /// neither overlap nor leave a gap.
+    /// </summary>
+    /// <param name="points">The corners in world coordinates (X, Z), in order around the polygon; 3 to <see cref="MaxPolygonCorners"/>.</param>
+    /// <param name="color">The colour.</param>
+    public void FillPolygon(ReadOnlySpan<(double X, double Z)> points, Rgb color) => ScanPolygon(points, color, byte.MaxValue);
+
+    /// <summary>Lays a translucent colour over a polygon, covering the same pixels as <see cref="FillPolygon"/>.</summary>
+    /// <param name="points">The corners in world coordinates (X, Z), in order around the polygon; 3 to <see cref="MaxPolygonCorners"/>.</param>
+    /// <param name="color">The colour.</param>
+    /// <param name="alpha">Its opacity, 0–255.</param>
+    public void BlendPolygon(ReadOnlySpan<(double X, double Z)> points, Rgb color, byte alpha) => ScanPolygon(points, color, alpha);
 
     /// <summary>Draws a one-pixel line between two world points; the part outside the image is cut off first.</summary>
     /// <param name="x0">The start's X, in metres.</param>
@@ -174,6 +191,67 @@ public sealed class MapCanvas
         if (Image.Contains(x, y))
         {
             Image[x, y] = color;
+        }
+    }
+
+    // Scan conversion: for each pixel row, the polygon's edges cross the line through the row's pixel centres at some
+    // points; the pixels whose centres lie between the first and second crossing, the third and fourth, and so on are
+    // inside. An edge counts for a row if the row's centre line lies in [its lower end, its upper end), so a corner on the
+    // line is counted once and polygons that share an edge don't share pixels.
+    private void ScanPolygon(ReadOnlySpan<(double X, double Z)> points, Rgb color, byte alpha)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(points.Length, 3, nameof(points));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(points.Length, MaxPolygonCorners, nameof(points));
+        int count = points.Length;
+        Span<double> xs = stackalloc double[count];
+        Span<double> ys = stackalloc double[count];
+        Span<double> crossings = stackalloc double[count];
+        double minY = double.PositiveInfinity;
+        double maxY = double.NegativeInfinity;
+        for (int i = 0; i < count; i++)
+        {
+            xs[i] = View.ToPixelX(points[i].X);
+            ys[i] = View.ToPixelY(points[i].Z);
+            if (!(double.IsFinite(xs[i]) && double.IsFinite(ys[i])))
+            {
+                return;
+            }
+
+            minY = Math.Min(minY, ys[i]);
+            maxY = Math.Max(maxY, ys[i]);
+        }
+
+        int firstRow = Math.Max(FirstCentreAtOrAfter(minY), 0);
+        int endRow = Math.Min(FirstCentreAtOrAfter(maxY), Image.Height);
+        for (int row = firstRow; row < endRow; row++)
+        {
+            double centreY = row + 0.5;
+            int found = 0;
+            for (int i = 0, j = count - 1; i < count; j = i++)
+            {
+                if ((ys[i] <= centreY && centreY < ys[j]) || (ys[j] <= centreY && centreY < ys[i]))
+                {
+                    double x = xs[i] + ((centreY - ys[i]) * (xs[j] - xs[i]) / (ys[j] - ys[i]));
+                    int k = found++;
+                    while (k > 0 && crossings[k - 1] > x)
+                    {
+                        crossings[k] = crossings[k - 1];
+                        k--;
+                    }
+
+                    crossings[k] = x;
+                }
+            }
+
+            for (int k = 0; k + 1 < found; k += 2)
+            {
+                int start = Math.Max(FirstCentreAtOrAfter(crossings[k]), 0);
+                int end = Math.Min(FirstCentreAtOrAfter(crossings[k + 1]), Image.Width);
+                for (int column = start; column < end; column++)
+                {
+                    Image[column, row] = alpha == byte.MaxValue ? color : Image[column, row].Blend(color, alpha);
+                }
+            }
         }
     }
 

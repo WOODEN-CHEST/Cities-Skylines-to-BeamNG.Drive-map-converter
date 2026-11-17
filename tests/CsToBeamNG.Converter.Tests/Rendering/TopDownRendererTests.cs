@@ -123,7 +123,7 @@ public sealed class TopDownRendererTests : IDisposable
     {
         IReadOnlyList<IRenderLayer> layers = RenderLayers.CreateDefault();
 
-        Assert.Equal(["ground", "terrain", "water", "tiles", "area", "axes"], layers.Select(layer => layer.Name));
+        Assert.Equal(["ground", "terrain", "water", "tiles", "networks", "area", "axes"], layers.Select(layer => layer.Name));
         Assert.All(layers, layer => Assert.False(string.IsNullOrWhiteSpace(layer.Description)));
     }
 

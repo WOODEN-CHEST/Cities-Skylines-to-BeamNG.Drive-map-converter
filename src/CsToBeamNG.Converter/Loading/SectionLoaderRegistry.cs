@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using CsToBeamNG.Converter.Networks;
 using CsToBeamNG.Converter.Terrain;
 using CsToBeamNG.Converter.Water;
 
@@ -19,12 +20,17 @@ public sealed class SectionLoaderRegistry
 
     /// <summary>Creates the registry with every loader the converter has.</summary>
     /// <remarks>
-    /// One loader per section of docs/dump-format.md, Sections: terrain and water so far; the export steps add networks,
-    /// buildings, props and trees here.
+    /// One loader per section of docs/dump-format.md, Sections: terrain, water and the networks so far; the export steps
+    /// add buildings, props and trees here. The network loaders check references against the network sections loaded
+    /// before them, so they run prefabs, nodes, segments, lanes.
     /// </remarks>
     public static SectionLoaderRegistry CreateDefault() => new SectionLoaderRegistry()
         .Add(new TerrainLoader())
-        .Add(new WaterLoader());
+        .Add(new WaterLoader())
+        .Add(new NetPrefabsLoader())
+        .Add(new NetNodesLoader())
+        .Add(new NetSegmentsLoader())
+        .Add(new NetLanesLoader());
 
     /// <summary>Registers a loader; it runs after the ones registered before it.</summary>
     /// <param name="loader">The loader.</param>

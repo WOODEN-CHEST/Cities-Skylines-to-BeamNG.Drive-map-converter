@@ -157,6 +157,53 @@ public sealed class MapCanvasTests
         Assert.Throws<ArgumentNullException>(() => new MapCanvas(new RgbImage(10, 10, default), null!));
     }
 
+    [Fact]
+    public void FillsThePixelsWhoseCentresAreInsideAPolygon()
+    {
+        // A square on pixel edges, and a triangle whose slanted edge, x = z + 60, passes exactly through pixel centres,
+        // which count as inside.
+        _canvas.FillPolygon([(10, 10), (40, 10), (40, 30), (10, 30)], _red);
+        _canvas.FillPolygon([(60, 0), (100, 0), (100, 40)], _blue);
+
+        Assert.Equal([(1, 7), (2, 7), (3, 7), (1, 8), (2, 8), (3, 8)], Find(_red));
+        Assert.Equal([(9, 6), (8, 7), (9, 7), (7, 8), (8, 8), (9, 8), (6, 9), (7, 9), (8, 9), (9, 9)], Find(_blue));
+    }
+
+    [Fact]
+    public void FillsPolygonsThatShareAnEdgeWithoutGapOrOverlap()
+    {
+        _canvas.BlendPolygon([(0, 0), (73, 0), (27, 100), (0, 100)], _red, 100);
+        _canvas.BlendPolygon([(73, 0), (100, 0), (100, 100), (27, 100)], _red, 100);
+
+        Assert.Equal(100, Find(default(Rgb).Blend(_red, 100)).Count);
+    }
+
+    [Fact]
+    public void FillsConcavePolygonsByTheEvenOddRule()
+    {
+        // A U shape: the notch between its arms stays empty.
+        _canvas.FillPolygon([(0, 0), (100, 0), (100, 100), (70, 100), (70, 30), (30, 30), (30, 100), (0, 100)], _red);
+
+        Assert.Equal(default, _canvas.Image[5, 2]);
+        Assert.Equal(_red, _canvas.Image[1, 2]);
+        Assert.Equal(_red, _canvas.Image[8, 2]);
+        Assert.Equal(_red, _canvas.Image[5, 8]);
+        Assert.Equal(72, Find(_red).Count);
+    }
+
+    [Fact]
+    public void ChecksPolygons()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => _canvas.FillPolygon([(0, 0), (1, 1)], _red));
+        Assert.Throws<ArgumentOutOfRangeException>(() => _canvas.FillPolygon(new (double, double)[MapCanvas.MaxPolygonCorners + 1], _red));
+
+        _canvas.FillPolygon([(0, 0), (double.NaN, 50), (100, 100)], _red);
+        _canvas.FillPolygon([(-1e9, -1e9), (1e9, -1e9), (1e9, 1e9), (-1e9, 1e9)], _blue);
+
+        Assert.Empty(Find(_red));
+        Assert.Equal(100, Find(_blue).Count);
+    }
+
     private List<(int X, int Y)> Find(Rgb color)
     {
         var found = new List<(int, int)>();

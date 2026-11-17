@@ -9,7 +9,7 @@ public static class RenderLayers
     /// <summary>Creates the default layers, bottom to top.</summary>
     /// <remarks>
     /// The export steps add theirs in these places: terrain shading and water right above the ground, so the tile
-    /// grid stays visible over them; roads, building footprints and trees above the grid; the area of interest and
+    /// grid stays visible over them; networks, building footprints and trees above the grid; the area of interest and
     /// the axes stay on top.
     /// </remarks>
     public static IReadOnlyList<IRenderLayer> CreateDefault() =>
@@ -18,6 +18,7 @@ public static class RenderLayers
         new HillshadeLayer(),
         new WaterLayer(),
         new TileGridLayer(),
+        new NetworkLayer(),
         new AreaOfInterestLayer(),
         new AxesLayer(),
     ];

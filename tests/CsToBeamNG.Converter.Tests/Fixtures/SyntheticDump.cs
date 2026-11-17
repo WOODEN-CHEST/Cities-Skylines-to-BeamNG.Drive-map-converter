@@ -92,6 +92,44 @@ internal sealed class SyntheticDump
         return this;
     }
 
+    /// <summary>
+    /// Adds the network sections, written by the real section writers; a <see langword="null"/> content leaves its
+    /// section out.
+    /// </summary>
+    public SyntheticDump WithNetwork(NetPrefabsSectionContent? prefabs, NetNodesSectionContent? nodes, NetSegmentsSectionContent? segments, NetLanesSectionContent? lanes)
+    {
+        _sections.Add(dump =>
+        {
+            if (prefabs is not null)
+            {
+                NetPrefabsSectionWriter.Write(dump, prefabs);
+            }
+
+            if (nodes is not null)
+            {
+                NetNodesSectionWriter.Write(dump, nodes);
+            }
+
+            if (segments is not null)
+            {
+                NetSegmentsSectionWriter.Write(dump, segments);
+            }
+
+            if (lanes is not null)
+            {
+                NetLanesSectionWriter.Write(dump, lanes);
+            }
+        });
+        return this;
+    }
+
+    /// <summary>Adds a section that the test writes itself, such as records that the section writers would reject.</summary>
+    public SyntheticDump WithCustomSection(Action<DumpWriter> write)
+    {
+        _sections.Add(write);
+        return this;
+    }
+
     /// <summary>Adds a section with one small JSON file, which no loader knows.</summary>
     public SyntheticDump WithOpaqueSection(string name, DumpVersion version)
     {
