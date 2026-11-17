@@ -1,17 +1,17 @@
 namespace CsToBeamNG.Dump.Manifest;
 
 /// <summary>A mod that was enabled during the export.</summary>
-public sealed class ModInfo
+public sealed class GameModInfo
 {
     /// <summary>Creates an empty instance, to fill in.</summary>
-    public ModInfo()
+    public GameModInfo()
     {
     }
 
     /// <summary>Creates an instance.</summary>
     /// <param name="name">The mod's name.</param>
     /// <param name="workshopId">The Steam Workshop item id, or <see langword="null"/> for a local mod.</param>
-    public ModInfo(string name, string? workshopId)
+    public GameModInfo(string name, string? workshopId)
     {
         Name = name;
         WorkshopId = workshopId;

@@ -84,7 +84,7 @@ public static class ManifestWriter
         json.WriteStartObject("game");
         json.WriteString("version", manifest.Game.Version);
         json.WriteStartArray("mods");
-        foreach (ModInfo mod in manifest.Game.Mods)
+        foreach (GameModInfo mod in manifest.Game.Mods)
         {
             json.WriteStartObject();
             json.WriteString("name", mod.Name);
@@ -219,11 +219,11 @@ public static class ManifestWriter
             ?? FindSectionProblem(manifest.Sections);
     }
 
-    private static string? FindModProblem(IList<ModInfo> mods)
+    private static string? FindModProblem(IList<GameModInfo> mods)
     {
         for (int i = 0; i < mods.Count; i++)
         {
-            ModInfo? mod = mods[i];
+            GameModInfo? mod = mods[i];
             if (mod is null || string.IsNullOrEmpty(mod.Name))
             {
                 return Element("game.mods", i) + ".name is required";

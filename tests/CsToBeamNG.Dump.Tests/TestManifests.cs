@@ -127,8 +127,8 @@ internal static class TestManifests
     public static DumpManifest Full()
     {
         DumpManifest manifest = Minimal();
-        manifest.Game.Mods.Add(new ModInfo("81 Tiles 2", "2862121823"));
-        manifest.Game.Mods.Add(new ModInfo("Local Mod", null));
+        manifest.Game.Mods.Add(new GameModInfo("81 Tiles 2", "2862121823"));
+        manifest.Game.Mods.Add(new GameModInfo("Local Mod", null));
         manifest.City.MapName = "Green Plains";
         manifest.City.Environment = "Sunny";
         manifest.City.MapTheme = "Alpine";

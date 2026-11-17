@@ -17,8 +17,8 @@ Agents cannot operate the CS1 user interface. When a change needs a fresh dump:
 
 1. Build. The exporter deploys itself into the CS1 mods folder.
 2. Ask the user for exactly what is needed, as a numbered list. For example:
-   > Start Cities: Skylines. In Content Manager → Mods, enable *CS to BeamNG Exporter* (first time only). Load CityPalma. Open Options → CS to BeamNG and click *Export*. Tell me when the message says the export has finished.
-3. Afterwards, read the newest dump folder, its `export.log` and the game log (locations in `agents/environment.md`). Look for exceptions and `[CsToBeamNG]` warnings.
+   > Start Cities: Skylines. In Content Manager → Mods, enable *CS to BeamNG Exporter* (first time only). Load CityPalma. Open Options, choose *CS to BeamNG Exporter* under Mod Settings, and click *Export city*. Tell me what the message says.
+3. Afterwards, read the newest dump folder in `<CS1 user data>/CsToBeamNG/dumps/`, its `manifest.json` and `export.log`, and the game log (locations in `agents/environment.md`). Look for exceptions and `[CsToBeamNG]` warnings.
 
 If several changes need the game, ask once. If step 0.6 makes unattended exports possible, its tooling replaces this procedure; update this section then.
 

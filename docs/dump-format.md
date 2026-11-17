@@ -14,7 +14,11 @@ The reference implementation is `src/CsToBeamNG.Dump/` ([Implementation](#implem
     └── ...              the section's files, named by its specification
 ```
 
-- A dump is a folder. The exporter creates `<CS1 user data>/CsToBeamNG/dumps/<city>_<timestamp>/` (step 0.4 confirms this), but the format doesn't depend on the folder's name or location.
+- A dump is a folder. The format doesn't depend on the folder's name or location, but the exporter creates `<CS1 user data>/CsToBeamNG/dumps/<city>_<yyyyMMdd-HHmmss>/`:
+  - `<CS1 user data>` is the game's user-data folder ([agents/environment.md](../agents/environment.md)).
+  - `<city>` is the city's name in lowercase ASCII letters and digits, with a hyphen for each run of other characters, at most 32 characters, or `city` if nothing remains; `<yyyyMMdd-HHmmss>` is the local time the export started. For example, `new-york_20261117-153000`.
+  - If that folder exists, `-2`, `-3` and so on are appended.
+  - `DumpLocation` in the Dump library implements these rules.
 - Only the files listed in the manifest belong to the dump. Readers ignore everything else, such as the log or a leftover `manifest.json.tmp`.
 - A section's files are in the folder named after the section, and may be in subfolders of it.
 - A section exists only once it is complete: writers add it to the manifest after its last file is closed. A section whose export failed is simply absent.
@@ -74,8 +78,6 @@ Readers:
 - for an **unknown section**, skip it with an information message.
 
 The major version 0 has no special meaning. Prefer minor changes: a major change makes existing dumps unreadable, and re-exporting needs the user to run the game.
-
-**Draft:** format 0.1 may still change without a new version number until the exporter writes its first dump (step 0.4). Step 0.4 removes this paragraph.
 
 ## manifest.json
 
@@ -148,7 +150,7 @@ Writers write the manifest twice: at the start of the export with `complete: fal
 | `exporter` | object | yes | The program that wrote the dump. |
 | `game` | object | yes | The game. |
 | `city` | object | yes | The city. |
-| `counts` | object | no | The number of objects in the game by kind, such as `buildings`: integers of 0 or more under camelCase keys. Step 0.4 defines the keys. |
+| `counts` | object | no | The number of objects in the game by kind: integers of 0 or more under camelCase keys ([`counts`](#counts)). |
 | `failureCounts` | object | no | The number of objects the exporter skipped because of errors, by kind, with keys like those of `counts`. |
 | `warnings` | array of strings | no | Short messages for the user. Details, such as the ids of skipped objects, go to `export.log`. |
 | `sections` | array of objects | yes | The sections, in the order they were completed. |
@@ -165,7 +167,7 @@ Writers write the manifest twice: at the start of the export with `complete: fal
 | Field | Type | Required | Meaning |
 |---|---|---|---|
 | `version` | string | yes | The game's version as the game reports it, such as `1.17.1-f4`. |
-| `mods` | array of objects | no | The mods that were enabled: `name` (string, required) and `workshopId` (the Steam Workshop item id as a string of decimal digits, absent for a local mod). |
+| `mods` | array of objects | no | The mods that were enabled, built-in ones included, sorted by name: `name` (string, required: the name Content Manager shows, or the mod's folder name if the mod reports none) and `workshopId` (the Steam Workshop item id as a string of decimal digits, absent for a local or built-in mod). |
 
 ### `city`
 
@@ -174,11 +176,28 @@ Writers write the manifest twice: at the start of the export with `complete: fal
 | `name` | string | yes | The city's name. It may be empty. |
 | `mapName` | string | no | The map the city was started on. |
 | `environment` | string | no | The environment (climate) as the game names it, such as `Sunny`. |
-| `mapTheme` | string | no | The custom map theme, if the city uses one. |
+| `mapTheme` | string | no | The name of the custom map theme, if the city uses one. |
 | `leftHandTraffic` | boolean | yes | Whether traffic drives on the left. |
-| `unlockedTiles` | array of objects | no | The tiles the city has unlocked, each with `x` and `z`, integers from 0 to 8. |
+| `unlockedTiles` | array of objects | no | The tiles the city has unlocked, each with `x` and `z`, integers from 0 to 8, ordered by z, then x. Absent or empty if the exporter couldn't read them; a warning then says why. |
 
-The map is a grid of 9 × 9 tiles of 1920 m ([research](research/cs1-save-and-world.md#world-geometry)). Tile (x, z) covers world X from −8640 + 1920·x to −8640 + 1920·(x + 1) metres, and world Z likewise, so the centre tile is (4, 4).
+The values come from the game's `SimulationMetaData` and `GameAreaManager` ([research](research/cs1-save-and-world.md#key-apis)).
+
+The map is a grid of 9 × 9 tiles of 1920 m ([research](research/cs1-save-and-world.md#world-geometry)). Tile (x, z) covers world X from −8640 + 1920·x to −8640 + 1920·(x + 1) metres, and world Z likewise, so the centre tile is (4, 4). The game's own grid of unlocked tiles covers only the central 5 × 5 tiles unless a mod such as 81 Tiles 2 extends it; the exporter converts it to this grid ([research](research/cs1-save-and-world.md#map-tiles)).
+
+### `counts`
+
+The exporter counts the entries in the game's instance buffers whose `Created` flag is set ([research](research/cs1-save-and-world.md#instance-limits-vanilla)). These are the keys it writes:
+
+| Key | Counted |
+|---|---|
+| `netNodes` | Network nodes: the ends and junctions of roads, paths, tracks, pipes and other networks. |
+| `netSegments` | Network segments, which join two nodes. |
+| `netLanes` | Network lanes. |
+| `buildings` | Buildings, sub-buildings included. |
+| `props` | Props placed on their own. Props that belong to buildings or networks aren't instances of their own and aren't counted. |
+| `trees` | Trees. |
+
+Readers accept keys they don't know, and missing keys, which mean the count is unknown.
 
 ### `sections`
 
@@ -317,7 +336,9 @@ Also: the JSON schemas, the optional fields with their defaults and the version 
 
 ## Diagnostics
 
-`export.log` in the dump folder is the exporter's detailed log (step 0.4). It isn't part of the format: readers ignore it, and its content may change at any time.
+`export.log` in the dump folder is the exporter's detailed log. It isn't part of the format: readers ignore it, and its content may change at any time.
+
+It is UTF-8 text with one line per message: the UTC time to the millisecond, the level (`detail`, `info`, `warning` or `error`) and the message. An error is followed by the exception's full text. Every line except details also goes to the game log, prefixed with `[CsToBeamNG]`.
 
 ## Implementation
 
@@ -325,7 +346,7 @@ Also: the JSON schemas, the optional fields with their defaults and the version 
 
 | Part | Types | Namespace |
 |---|---|---|
-| Writing a dump | `DumpWriter`, `SectionWriter` | `CsToBeamNG.Dump` |
+| Writing a dump | `DumpWriter`, `SectionWriter`; `DumpLocation` (where the exporter puts dumps) | `CsToBeamNG.Dump` |
 | Reading a dump (.NET 10) | `DumpReader`, `DumpSection`, `DumpReadOptions`, `DumpNotice` | `CsToBeamNG.Dump` |
 | Manifest | `DumpManifest` and its parts, `ManifestWriter`; `ManifestReader` (.NET 10) | `CsToBeamNG.Dump.Manifest` |
 | Record files | `RecordFileWriter`, `RecordFileReader`, `RecordFileFormat` | `CsToBeamNG.Dump.Records` |
@@ -341,4 +362,4 @@ Readers report a dump they can't read with a `DumpException` whose `Kind` says w
 
 | Version | Date | Change |
 |---|---|---|
-| Format 0.1 | 2026-11-17 | First version (step 0.3): layout, names, manifest, record files, string tables, JSON conventions. |
+| Format 0.1 | 2026-11-17 | First version (step 0.3): layout, names, manifest, record files, string tables, JSON conventions. Completed before the first dump (step 0.4): the `counts` keys, the dump folder's location and name, the content of `game.mods`. |

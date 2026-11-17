@@ -43,7 +43,7 @@ App ids: Cities: Skylines **255710**, BeamNG.drive **284160**.
 | Game log | `Cities_Data\output_log.txt` (verify) | `~/.config/unity3d/Colossal Order/Cities_ Skylines/Player.log` (underscore and space, not a colon) |
 | Workshop items | `<library>\steamapps\workshop\content\255710\<item id>\` | same layout |
 
-Inside the game, mods should use `ColossalFramework.IO.DataLocation` (`localApplicationData`, `addonsPath`, `modsPath`, `saveLocation`) instead of these tables. The exporter writes dumps to `<user data>/CsToBeamNG/dumps/<city>_<timestamp>/`; step 0.4 confirms this.
+Inside the game, mods should use `ColossalFramework.IO.DataLocation` (`localApplicationData`, `addonsPath`, `modsPath`, `saveLocation`) instead of these tables. The exporter writes dumps to `<user data>/CsToBeamNG/dumps/<city>_<yyyyMMdd-HHmmss>/` (naming rules in [docs/dump-format.md, Layout](../docs/dump-format.md#layout)), and its Options page shows the folder.
 
 ### Build-time locations (MSBuild properties)
 

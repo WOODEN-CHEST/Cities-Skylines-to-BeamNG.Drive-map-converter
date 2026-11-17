@@ -28,6 +28,8 @@ BeamNG level in the user's BeamNG user folder (mods/unpacked/<mod>/levels/<level
 - Uses the game's own code for anything derived (curves, corners, randomised placement, colours) instead of reimplementing it.
 - Extracts the meshes and textures of the prefabs the city uses (later phases).
 - Is strictly read-only: it never changes the simulation or the save.
+- Is a thin layer over the game: it reads the game into plain data types in its `Core/` folder, where everything that needs no game types lives and is unit-tested without the game (D16).
+- Runs an export as one action on the simulation thread, which reads the city and writes the dump while the simulation waits, so the dump is consistent; the main thread only prepares the export and shows its result (D17).
 
 ### Dump
 
@@ -93,7 +95,7 @@ The inputs depend on reverse-engineered game internals and on whatever mods and 
 
 ## Testing strategy
 
-- Unit and golden-file tests in the converter and the dump library, with synthetic fixtures.
+- Unit and golden-file tests in the converter, the dump library and the exporter's game-independent core, with synthetic fixtures.
 - Purpose-built CS1 test cities (one road, junction or bridge type each), plus real saves.
 - End-to-end checks in BeamNG through its MCP server: load, screenshots, ground heights, AI routes, performance.
 
@@ -116,3 +118,5 @@ The inputs depend on reverse-engineered game internals and on whatever mods and 
 | D13 | 2026-11-17 | Dump container: `manifest.json` plus one folder per section; binary record files with a 64-byte `CSBD` header whose record count is written last; a JSON string table per section; a `major.minor` version for the format and for each section, readable within a major version | Sections evolve independently, and a breaking change in one only makes readers skip it. The count written last marks interrupted files. Readers advance by the header's record size, so minor versions can append fields. |
 | D14 | 2026-11-17 | All format code, including the .NET 10 readers that use System.Text.Json, lives in `CsToBeamNG.Dump`; the converter only interprets the data | The writer, the reader and each section's layout stay in one place, shared by the exporter and the converter, so they can't drift apart. |
 | D15 | 2026-11-17 | The JSON writer computes the text of floating-point numbers itself (Burger and Dybvig's algorithm, exact integer arithmetic) instead of using the runtime's `ToString("R")` | On Mono, `R` formatting and parsing agree with each other but not with correct parsers (verified on Mono 6.8), so a write-and-check approach can't catch the error. Integer arithmetic gives the same text on every runtime, and tests compare it with .NET 10. |
+| D16 | 2026-11-17 | The exporter is a thin layer that reads the game into plain types; its game-independent code lives in `src/CsToBeamNG.Exporter/Core/`, which `tests/CsToBeamNG.Exporter.Tests` compiles in from source | The exporter can't be loaded without the game's assemblies, and CI has none, so testable code must not depend on them. Compiling the files into the test project avoids a third DLL in the mod folder. |
+| D17 | 2026-11-17 | An export reads the city and writes the dump in one action on the simulation thread (`SimulationManager.AddAction`); the main thread prepares it and shows the result | The simulation can't change the data while it is read, the UI stays responsive, and the game runs such actions even while paused. The simulation waits while the dump is written; if that gets long for large sections, they can copy the data in the action and write it on another thread. |

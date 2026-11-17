@@ -123,7 +123,7 @@ public static class ManifestReader
         foreach ((JsonElement mod, string path) in reader.OptionalArray(game, "mods", "$.game"))
         {
             reader.RequireObject(mod, path);
-            info.Mods.Add(new ModInfo(reader.RequiredString(mod, "name", path), reader.OptionalString(mod, "workshopId", path)));
+            info.Mods.Add(new GameModInfo(reader.RequiredString(mod, "name", path), reader.OptionalString(mod, "workshopId", path)));
         }
 
         return info;

@@ -17,6 +17,7 @@
 - Local saves are in `<CS1 user data>/Saves/`.
 - Steam Cloud saves are in `<Steam root>/userdata/<account id>/255710/remote/*.crp`.
 - The game lists both. [verified: the maintainer's saves exist only in the cloud folder]
+- A save's file name isn't the city's name: `CityPalma.crp` holds the city "San Palma". [verified 2026-11-17 by the first dump]
 
 ## World geometry
 
@@ -24,6 +25,18 @@
 - Vanilla only allows building inside the central 5 × 5 tiles. How many of those can be bought depends on version and settings; community sources say 9 by default. 81-tile mods (e.g. 81 Tiles 2) unlock the whole 9 × 9 map. [community: EML `EGameAreaManager`]
 - Coordinates are Unity world space: metres, Y up, left-handed, with X and Z horizontal.
 - The conversion to BeamNG is described in [architecture.md, Coordinate systems](../architecture.md#coordinate-systems).
+
+## Map tiles
+
+[verified 2026-11-17 by reading the IL of `GameAreaManager` (Steam build 22724702) and of 81 Tiles 2 (workshop item 2862121823)]
+
+- `GameAreaManager.m_areaGrid` (`int[]`) records which tiles are unlocked. In vanilla it covers the central 5 × 5 tiles (`AREAGRID_RESOLUTION` = 5; `TOTAL_AREA_RESOLUTION` = 9 is the whole map; `AREAGRID_CELL_SIZE` = 1920).
+  - Layout: row by row, index `z * 5 + x`, with x growing with world X and z with world Z.
+  - Position: grid tile x covers world X from (x − 2.5) · 1920 to (x − 1.5) · 1920 m, and z likewise, so grid tile (x, z) is tile (x + 2, z + 2) of the 9 × 9 map grid used in the dump.
+  - Values: 0 means locked. Unlocking a tile stores the incremented `m_areaCount`, so the value is the order in which the tile was unlocked, and the starting tile holds 1. [Also verified in game on 2026-11-17: CityPalma's grid holds 1 at the centre (grid tile (2, 2)), and 2 and 3 at two neighbours.]
+  - `IsUnlocked(x, z)` and `GetArea(x, z)` take grid coordinates. `GetArea` returns the stored value, −1 for a tile outside the 5 × 5 grid but on the map, and −2 off the map.
+- 81 Tiles 2 replaces `m_areaGrid` with an 81-entry array in the same row-by-row layout over the whole 9 × 9 map, and patches the methods that assume 5. When it converts a save without its own data, it copies vanilla entry (x, z) to (x + 2, z + 2).
+- So the grid's size follows from the array's length: 25 entries for vanilla, 81 with 81 Tiles 2. The exporter centres any odd square grid on the 9 × 9 map ([dump-format.md, `city`](../dump-format.md#city)).
 
 ## Terrain
 
@@ -42,16 +55,39 @@
 
 ## Instance limits (vanilla)
 
-| Type | Limit | Notes |
-|---|---|---|
-| Buildings | 49,152 | [community; derived from offsets in decompiled code] |
-| Net segments | 36,864 | [community; same derivation] |
-| Net nodes | 32,768 | [community; unverified] |
-| Net lanes | 262,144 | [community; unverified] |
-| Props | 65,536 (map editor: 50,000) | ×4 with Extended Managers / Prop Anarchy, using uint ids [community: [EML EPropManager.cs](https://github.com/Quistar-LAB/EManagersLib/blob/master/EPropManager.cs)] |
-| Trees | 262,144 (map editor: 250,000) | ×4 with Tree Anarchy [community: [TreeAnarchy TAMod.cs](https://github.com/Quistar-LAB/TreeAnarchy/blob/master/TAMod.cs)] |
+The limits are the managers' `MAX_*_COUNT` constants. [verified 2026-11-17 in Assembly-CSharp, Steam build 22724702]
+
+| Type | Constant | Limit | Notes |
+|---|---|---|---|
+| Buildings | `BuildingManager.MAX_BUILDING_COUNT` | 49,152 | |
+| Net segments | `NetManager.MAX_SEGMENT_COUNT` | 36,864 | |
+| Net nodes | `NetManager.MAX_NODE_COUNT` | 32,768 | |
+| Net lanes | `NetManager.MAX_LANE_COUNT` | 262,144 | |
+| Props | `PropManager.MAX_PROP_COUNT` | 65,536 (map editor: 50,000 [community]) | ×4 with Extended Managers / Prop Anarchy, using uint ids [community: [EML EPropManager.cs](https://github.com/Quistar-LAB/EManagersLib/blob/master/EPropManager.cs)] |
+| Trees | `TreeManager.MAX_TREE_COUNT` | 262,144 (map editor: 250,000 [community]) | ×4 with Tree Anarchy [community: [TreeAnarchy TAMod.cs](https://github.com/Quistar-LAB/TreeAnarchy/blob/master/TAMod.cs)] |
+
+How instances are stored [verified 2026-11-17 in the IL]:
+
+- Each manager keeps its instances in an array wrapper whose `m_buffer` has the limit's length: `Array16<T>` for nodes (`NetManager.m_nodes`), segments (`m_segments`), buildings (`BuildingManager.m_buildings`) and props (`PropManager.m_props`); `Array32<T>` for lanes (`NetManager.m_lanes`) and trees (`TreeManager.m_trees`). The index is the instance's id.
+- An entry is in use when its `Created` flag (value 1) is set. `NetNode`, `NetSegment` and `Building` have typed `m_flags`; `NetLane`, `PropInstance` and `TreeInstance` store theirs in a `ushort m_flags` that holds their `Flags` enum.
+- The managers' counters (`m_nodeCount`, `m_segmentCount`, `m_laneCount`, `m_buildingCount`, `m_propCount`, `m_treeCount`) are set to the wrapper's item count minus one (id 0 is never used) when an instance is created or released and after loading. [Also verified in game on 2026-11-17: in CityPalma, all six counters equal the number of entries with `Created` set.]
+- Sub-buildings are building instances of their own ([cs1-assets.md](cs1-assets.md)), linked through `Building.m_parentBuilding` and `m_subBuilding` [verified names]. Props that belong to buildings or networks are placed from their prefabs ([cs1-assets.md](cs1-assets.md), [cs1-networks.md, Lane props](cs1-networks.md#lane-props)), so `PropManager` holds only the props placed on their own [community].
 
 Prop positions are stored quantised: x and z as short × 0.263671875 m, y as u16 / 64 m, and the angle as u16 × 2π/65536. EML adds extra precision. Read positions through the game's accessors instead of decoding the fields. [community: [EML EPropInstance.cs](https://github.com/Quistar-LAB/EManagersLib/blob/master/EPropInstance.cs)]
+
+## Threads
+
+[verified 2026-11-17 by reading the IL of Assembly-CSharp and ColossalManaged, Steam build 22724702]
+
+- **Simulation thread.** The simulation runs on its own thread (`SimulationManager.m_simulationThread`). Each `FixedUpdate` of `SimulationManager` on the main thread adds to a counter (up to a maximum number of frames behind) and wakes the thread, which then runs `SimulationStep`.
+- **Actions run even while paused.** `SimulationStep` first runs every action queued with `SimulationManager.AddAction`, and only then advances the simulation, unless it is paused. The game never changes Unity's `Time.timeScale`, so fixed updates, and with them queued actions, keep running while the game is paused, for example while Options is open.
+  - `AddAction(Action)` returns an `AsyncAction`. Overloads take an `IEnumerator` for work spread over several steps.
+  - Code in an action sees the simulation between two steps, so a whole read in one action is consistent.
+- **Back to the main thread.** `ColossalFramework.Threading.ThreadHelper.dispatcher.Dispatch(Action)` queues an action for the main thread, where `ThreadHelper.Update` runs it. The game itself dispatches this way from the simulation thread.
+- **ICities equivalents.** `IThreading.QueueSimulationThread` calls `AddAction`, and `QueueMainThread` calls `Dispatch`; each runs the action at once if it is already on the right thread.
+- **Singletons.** `Singleton<T>.instance` (ColossalFramework, `T : Component`) creates the singleton when it doesn't exist yet, with `Object.FindObjectOfType` or a new `GameObject`: Unity calls that are only allowed on the main thread. `Singleton<T>.exists` checks without creating. The managers derive from it, so `NetManager.instance` and the like should be resolved on the main thread.
+- **Logging.** The game's own logging ends in `UnityEngine.Debug.Log`, which it also calls on the simulation thread, so Unity's logging works from other threads.
+- **Logged errors.** The game's `ErrorManager` subscribes to `Application.logMessageReceivedThreaded` and collects messages of the types Error, Assert and Exception. What it then shows the user is [inferred]: its error display. A mod that handles and reports its own problems should log them as warnings.
 
 ## Runtime and modding facts
 
@@ -60,9 +96,20 @@ Prop positions are stored quantised: x and z as short × 0.263671875 m, y as u16
   - Our mod built with the .NET 10 SDK (C# 14, net35 reference assemblies from NuGet, compiler-generated nullable attributes) loads without errors and is listed in Content Manager → Mods. [verified 2026-11-16, native Linux, Steam build 22724702]
   - The game loads every DLL in a mod folder. The log shows `Loading <path>` and then `Assembly <name>, Version=... loaded.`, both tagged `[Mods - Internal]`. A folder without `Source/` gets `No source files found: <folder>`. [verified 2026-11-16]
   - Every mod assembly, built-in ones such as UnlockAll included, also produces `Non platform assembly: data-0x... (this message is harmless)` and `Fallback handler could not load library .../data-0x....so`. These lines are normal. [verified 2026-11-16]
-- **Mod entry points** come from ICities: `IUserMod` and `LoadingExtensionBase` [verified]. The settings UI comes from a public `OnSettingsUI(UIHelperBase)` method that the game finds by reflection, so it is not part of the interface. [community]
+- **Mod entry points** come from ICities: `IUserMod` and `LoadingExtensionBase` [verified].
+- **Settings UI** [verified 2026-11-17 in the IL]:
+  - The game's `OptionsMainPanel` finds `OnSettingsUI(UIHelperBase)` on the mod's `IUserMod` instance with `GetMethod("OnSettingsUI", Public | Instance)`, so it must be a public instance method; it isn't part of the interface.
+  - `UIHelperBase` offers buttons, checkboxes, sliders, dropdowns, text fields, groups and spaces, but no labels. Its implementation, `UIHelper` (global namespace), exposes the group's panel as `self` (a `UIComponent`), to which a `UILabel` can be added with `AddUIComponent<UILabel>()`.
+  - The game shows its own error messages with `UIView.library.ShowModal<ExceptionPanel>("ExceptionPanel").SetMessage(title, message, isError)`. The exporter uses the same panel, also for messages that aren't errors, which it shows with an OK button. [verified in game 2026-11-17]
+- **Loading extensions** [verified 2026-11-17 in the IL]:
+  - The game calls `OnLevelLoaded(LoadMode)` on every `ILoadingExtension` and catches what they throw, reporting it as "The Mod … has caused an error" through `UIView.ForwardException`.
+  - `ILoading.currentMode` maps the tool controller's mode (`ItemClass.Availability`) to `AppMode`: Game, MapEditor, AssetEditor, ThemeEditor or ScenarioEditor; any other value counts as Game. It is the simplest test for "a city is being played".
+  - `LoadMode` has the same values as `SimulationManager.UpdateMode`, where `NewGame` is called `NewGameFromMap`.
+- **Global namespace.** Assembly-CSharp declares the game's types in the global namespace, including common names such as `ModInfo`, `NetInfo` and `Building` [verified]. In a mod, such a type wins over a type of the same name imported with `using`, and a `using` alias of that name is a compile error (CS0576). That is why the Dump library calls its mod type `GameModInfo`.
+- **Enabled mods** [verified 2026-11-17 in the IL]: `PluginManager.instance.GetPluginsInfo()` lists `PluginManager.PluginInfo`s with `isEnabled`, `isBuiltin`, `name` (the mod folder's name), `modPath`, `publishedFileID` (a `PublishedFileId`; `AsUInt64` is the workshop item id, and `PublishedFileId.invalid` marks local and built-in mods) and `userModInstance` (the mod's `IUserMod`, whose `Name` is what Content Manager shows).
 - **Harmony patching**, if needed, goes through `CitiesHarmony.API` (NuGet, MIT): call `HarmonyHelper.DoOnHarmonyReady`, and keep Harmony types out of the `IUserMod` class. [community: [CitiesHarmony](https://github.com/boformer/CitiesHarmony)]
 - **Paths in-game:** `ColossalFramework.IO.DataLocation` has `localApplicationData`, `addonsPath`, `modsPath`, `saveLocation`, `gameContentPath` and `executableDirectory`. [verified: the property getters exist]
+  - On Linux, `localApplicationData` is `$XDG_DATA_HOME`, or else .NET's local application data folder (`~/.local/share`), plus `Colossal Order/Cities_Skylines`. The getter creates the folder if it is missing and makes no Unity calls. [verified 2026-11-17 in the IL]
 - **Game log:**
   - Linux: `~/.config/unity3d/Colossal Order/Cities_ Skylines/Player.log`. The folder name has an underscore where the product name has a colon, because Unity replaces the `:`. [verified 2026-11-16 on the native Linux build: the log is there and starts with the game's Mono loading lines.] The previously recorded `.../Cities: Skylines/Player.log` (from [CSM developer resources](https://github.com/CitiesSkylinesMultiplayer/CSM/wiki/Developer-Resources)) does not exist.
   - Windows: `Cities_Data/output_log.txt` [inferred from Unity 5.x conventions; verify].
@@ -78,14 +125,18 @@ Prop positions are stored quantised: x and z as short × 0.263671875 m, y as u16
 
 Most names below are verified to exist in the game assemblies. Their use and semantics are [inferred] until an exporter step uses them; upgrade the tags then.
 
-- **Networks:** `NetManager.instance.m_nodes` / `m_segments` / `m_lanes`, each with `.m_buffer`. `NetLane.m_bezier` [verified].
-- **Buildings:** `BuildingManager.instance.m_buildings.m_buffer`.
-- **Props:** `PropManager.instance.m_props.m_buffer`. **Trees:** `TreeManager.instance.m_trees.m_buffer`.
+- **Networks:** `NetManager.instance.m_nodes` / `m_segments` / `m_lanes`, each with `.m_buffer` [verified: counted by step 0.4; see Instance limits]. `NetLane.m_bezier` [verified].
+- **Buildings:** `BuildingManager.instance.m_buildings.m_buffer` [verified: counted by step 0.4].
+- **Props:** `PropManager.instance.m_props.m_buffer`. **Trees:** `TreeManager.instance.m_trees.m_buffer` [verified: counted by step 0.4].
 - **Terrain and water:** `TerrainManager.instance`, `WaterSimulation` [verified].
-- **City metadata:** `SimulationManager.instance.m_metaData`, with `m_CityName`, `m_environment`, `m_MapThemeMetaData` and `m_invertTraffic` (left-hand traffic) [verified names].
-- **Simulation thread access:** `SimulationManager.instance.AddAction` [verified name].
-- **Tiles:** `GameAreaManager.instance` [verified class].
-- **Mods list:** `ColossalFramework.Plugins.PluginManager` [verified class].
-- **Game version:** `BuildConfig.applicationVersion` [verified names].
+- **City metadata:** `SimulationManager.instance.m_metaData` (`SimulationMetaData`) [verified names and types 2026-11-17]:
+  - `m_CityName` (the city's name), `m_MapName` (the map the city was started on) and `m_environment` (the climate, such as `Sunny`), all strings;
+  - `m_MapThemeMetaData` (`MapThemeMetaData`, not saved with the city): the custom map theme, or null; its `name` is the theme's name, and it has its own `environment`;
+  - `m_invertTraffic` (`SimulationMetaData.MetaBool`: `Undefined` 0, `False` 1, `True` 2): `True` means left-hand traffic.
+  - [verified in game 2026-11-17, first dump] CityPalma gave `m_CityName` "San Palma", `m_MapName` "Diamond Coast", `m_environment` "Tropical" and no map theme, which match the city. Only right-hand traffic has been seen so far, so what `True` looks like in a left-hand-traffic city is still [inferred].
+- **Simulation thread access:** `SimulationManager.instance.AddAction` [verified; see Threads].
+- **Tiles:** `GameAreaManager.instance.m_areaGrid` [verified; see Map tiles].
+- **Mods list:** `ColossalFramework.Plugins.PluginManager` [verified; see Runtime and modding facts].
+- **Game version:** `BuildConfig.applicationVersion` and `applicationVersionFull`, static string properties [verified]: `1.21.1-f9` and `1.21.1-f9-steam-linux` on the maintainer's native Linux install (2026-11-17). Read the properties: the `APPLICATION_VERSION*` fields are constants, which the compiler would copy into a mod at build time.
 - **Loading a save:** `LoadingManager`, `SaveGameMetaData`, `LoadLevel` [verified names].
 - **Randomness:** `ColossalFramework.Math.Randomizer` [verified class], seeded per instance id. Call it in-game instead of reimplementing it.

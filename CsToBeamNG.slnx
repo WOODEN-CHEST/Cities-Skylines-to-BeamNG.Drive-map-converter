@@ -9,5 +9,6 @@
     <Project Path="tests/CsToBeamNG.Cli.Tests/CsToBeamNG.Cli.Tests.csproj" />
     <Project Path="tests/CsToBeamNG.Converter.Tests/CsToBeamNG.Converter.Tests.csproj" />
     <Project Path="tests/CsToBeamNG.Dump.Tests/CsToBeamNG.Dump.Tests.csproj" />
+    <Project Path="tests/CsToBeamNG.Exporter.Tests/CsToBeamNG.Exporter.Tests.csproj" />
   </Folder>
 </Solution>

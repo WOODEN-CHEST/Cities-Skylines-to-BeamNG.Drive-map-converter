@@ -9,5 +9,5 @@ public sealed class GameInfo
     public string Version { get; set; } = string.Empty;
 
     /// <summary>The mods that were enabled during the export.</summary>
-    public IList<ModInfo> Mods { get; } = new List<ModInfo>();
+    public IList<GameModInfo> Mods { get; } = new List<GameModInfo>();
 }

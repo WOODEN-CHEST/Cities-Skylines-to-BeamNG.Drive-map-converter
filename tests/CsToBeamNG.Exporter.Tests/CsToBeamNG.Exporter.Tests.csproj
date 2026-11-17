@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <!-- xUnit.net v3 test projects are executables that run on Microsoft Testing Platform. -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <!--
+    The exporter needs the game's assemblies, so this project can't reference it (and CI has no game).
+    Its game-independent code in Core/ is compiled in here instead, so it must not use game types
+    (agents/conventions.md).
+  -->
+  <ItemGroup>
+    <Compile Include="../../src/CsToBeamNG.Exporter/Core/**/*.cs" Link="Exporter/Core/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/CsToBeamNG.Dump/CsToBeamNG.Dump.csproj" />
+  </ItemGroup>
+
+</Project>

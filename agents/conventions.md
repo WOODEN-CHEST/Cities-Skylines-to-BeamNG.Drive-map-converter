@@ -37,12 +37,15 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
   - `string.IsNullOrWhiteSpace`, `Enum.HasFlag`, `Stream.CopyTo`, `StringBuilder.Clear`, `BitConverter.SingleToInt32Bits`
   - `Path.Combine` with more than two arguments, `File.Move` onto an existing file
 - **Don't trust the runtime's floating-point text.** Mono's `double.ToString("R")` and `double.Parse` can both be off by one unit in the last place, in ways that agree with each other (verified on Mono 6.8). Write JSON only with the Dump library's `JsonWriter`, which computes the digits exactly, and binary data with `RecordFileWriter`. Never format numbers for the dump by hand.
+- **The game's global types hide ours.** Assembly-CSharp puts its types in the global namespace (`ModInfo`, `NetInfo`, `Building`, ...). In exporter code such a type wins over one of the same name imported with `using`, and an alias of that name doesn't compile (CS0576). So public types in `Dump` must not share a name with a global game type; this is why the manifest's mod type is `GameModInfo`.
 - **Avoid language features that need runtime or library support:** default interface members, `ref struct`, records and `init` (they would need an `IsExternalInit` polyfill; check in the game before relying on them).
 - **Nullable analysis is on for net35 too.** The compiler generates the attributes it needs. The flow-analysis attributes (`NotNullWhen`, `MemberNotNull`, ...) come from internal polyfills in `src/Shared/NullableAttributes.cs`, which every net35 project compiles in. Never expose them to another net35 assembly through `InternalsVisibleTo`: the copies would conflict (CS0436).
 - **Code compiled for both targets (Dump):** the analyzers also check the net10.0 build, where they suggest APIs that net35 lacks; for example, CA1510 asks for `ArgumentNullException.ThrowIfNull`. Use `#if NET` for such calls, or a small helper in Dump (`Guard` has the common checks); don't disable the rule.
   - Code that only the converter needs, such as the readers built on System.Text.Json, may use the whole .NET 10 library. Wrap such a file's entire content in `#if NET` ... `#endif`, so it is plainly absent from the net35 build.
   - Records and `init` are fine in those net10-only files.
 - **Threads:** call Unity APIs only on the main thread. Read simulation data consistently: on the simulation thread (`SimulationManager.AddAction`), or justify any other approach in a comment.
+  - Resolve managers (`NetManager.instance` and the like) on the main thread, because `Singleton<T>.instance` creates a missing one through Unity, and check `Singleton<T>.exists` first.
+  - Read everything that must be consistent in one simulation-thread action, then show UI on the main thread again through `ThreadHelper.dispatcher.Dispatch`. `ExportController` and `ExportJob` follow this pattern; the facts are in [research, Threads](../docs/research/cs1-save-and-world.md#threads).
 - **Never modify game state.** The exporter only reads. Don't pause the simulation, change settings, or write into managers.
 - **One bad object must not abort an export.** Catch per object, log its id and prefab name, count the failures, and report them in the manifest.
 - **Locations:** use `ColossalFramework.IO.DataLocation`; never hard-code paths.
@@ -75,7 +78,7 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
 - Fail fast on unreadable or incompatible input, with a message that names the file, the version found and the version expected.
 - Degrade gracefully on individual objects: skip the object, log a warning with its identity, count it, and include the counts in the conversion report.
 - **Converter:** log through the `Microsoft.Extensions.Logging` abstractions; the first step that logs adds the package. The CLI prints a concise summary and writes a detailed log next to the output.
-- **Exporter:** write `export.log` in the dump folder, plus `[CsToBeamNG]`-prefixed lines in the game log.
+- **Exporter:** write `export.log` in the dump folder, plus `[CsToBeamNG]`-prefixed lines in the game log; `ExportLog` does both. Log problems the exporter handles as warnings, never with `Debug.LogError`: the game collects logged errors for its own error display, and the exporter tells the user itself.
 
 ## Tests
 
@@ -87,7 +90,7 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
   - round-trip tests for readers and writers.
 - Fixtures are synthetic or contain only layout data (positions, names). Never commit game meshes, textures or dumps as fixtures.
 - Every bug fix gets a regression test where feasible.
-- The exporter can't run outside the game, so keep testable logic (data shaping, encoding) in `Dump` or in pure helper classes.
+- The exporter can't run outside the game, so keep testable logic (data shaping, encoding) in `Dump`, or in the exporter's `Core/` folder. Code in `Core/` must not use game types: `tests/CsToBeamNG.Exporter.Tests` compiles it in and tests it without the game, also on CI. The rest of the exporter is a thin layer that reads the game into `Core` types.
 
 ## Dependencies
 

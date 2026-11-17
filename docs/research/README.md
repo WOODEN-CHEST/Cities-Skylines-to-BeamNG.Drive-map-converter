@@ -4,7 +4,7 @@ What we know about the two games' internals and file formats, collected while bu
 
 | File | Topic |
 |---|---|
-| [cs1-save-and-world.md](cs1-save-and-world.md) | Savegame container, how the simulation is stored, map geometry, terrain, water, instance limits, key game APIs |
+| [cs1-save-and-world.md](cs1-save-and-world.md) | Savegame container, how the simulation is stored, map geometry and tiles, terrain, water, instance storage and limits, threads, modding facts, key game APIs |
 | [cs1-networks.md](cs1-networks.md) | Roads, rails, paths: data model, render data, mesh deformation, lane props |
 | [cs1-assets.md](cs1-assets.md) | Prefabs, meshes, texture channel packing, colour variation, placement randomness |
 | [beamng-level-format.md](beamng-level-format.md) | Level structure, terrain file, objects, meshes, materials, forest, limits |
@@ -21,4 +21,4 @@ What we know about the two games' internals and file formats, collected while bu
   - **[community]**: mod source code, wikis, forums.
   - **[inferred]**: our reasoning, not yet checked.
 - Prefer upgrading a claim's tag over adding a duplicate note. When a claim turns out wrong, fix it and say what was wrong.
-- Versions at the time of writing: CS1 final patch line (Unity 5.6.7f1), BeamNG.drive 0.40.5.
+- Versions at the time of writing: CS1 1.21.1-f9, the final patch line (Unity 5.6.7f1); BeamNG.drive 0.40.5.
