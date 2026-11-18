@@ -25,7 +25,7 @@ public static class HeightProbeCheck
     public const string RawCopyComparison = "rawVsRaw2";
 
     /// <summary>
-    /// Compares the converter's samplers with the game's at every probed position: <see cref="CityTerrain.SampleGround"/>
+    /// Compares the converter's samplers with the game's at every probed position: <see cref="CityTerrain.SampleGround(double, double)"/>
     /// with <c>SampleDetailHeight</c>, and the final and raw heights with <c>SampleFinalHeight</c> and
     /// <c>SampleRawHeight</c>. The raw comparison is left out when the probe found that the game's copy of the raw
     /// heights, which <c>SampleRawHeight</c> reads, differed from the raw heights the dump holds.

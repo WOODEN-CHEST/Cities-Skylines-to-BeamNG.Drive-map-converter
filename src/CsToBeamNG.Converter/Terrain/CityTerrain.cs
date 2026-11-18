@@ -14,7 +14,7 @@ namespace CsToBeamNG.Converter.Terrain;
 /// </summary>
 /// <remarks>
 /// The ground the game draws, and places objects on, is the final heights, refined by the detail heights where a tile
-/// has them; <see cref="SampleGround"/> reads it the way the game's <c>TerrainManager.SampleDetailHeight</c> does
+/// has them; <see cref="SampleGround(double, double)"/> reads it the way the game's <c>TerrainManager.SampleDetailHeight</c> does
 /// (docs/research/cs1-save-and-world.md, Terrain).
 /// </remarks>
 public sealed class CityTerrain : ISectionData
@@ -128,7 +128,18 @@ public sealed class CityTerrain : ISectionData
     /// </summary>
     /// <param name="x">The world X, in metres.</param>
     /// <param name="z">The world Z, in metres.</param>
-    public double SampleGround(double x, double z)
+    public double SampleGround(double x, double z) => SampleGround(x, z, CoarseInterpolation.Bilinear);
+
+    /// <summary>
+    /// Returns the height of the ground at a world position, in metres, like <see cref="SampleGround(double, double)"/>,
+    /// but with a choice of how the 16 m final heights are read: wherever the game reads them (tiles without detail
+    /// heights, and a detail tile's edges next to such tiles), <paramref name="coarse"/> applies. The detail heights are
+    /// always read bilinearly, so roads and lots keep the game's exact ground.
+    /// </summary>
+    /// <param name="x">The world X, in metres.</param>
+    /// <param name="z">The world Z, in metres.</param>
+    /// <param name="coarse">How to interpolate the final heights.</param>
+    public double SampleGround(double x, double z, CoarseInterpolation coarse)
     {
         int last = DetailGrid.Resolution - 1;
         double gridX = Math.Clamp(Finite((x - DetailGrid.OriginX) / DetailGrid.Spacing), 0, last);
@@ -137,16 +148,27 @@ public sealed class CityTerrain : ISectionData
         int j = (int)gridZ;
         if (DetailTileAt(i, j) is null)
         {
-            return FinalHeights.Sample(x, z);
+            return coarse == CoarseInterpolation.Bilinear ? FinalHeights.Sample(x, z) : FinalHeights.SampleSmooth(x, z);
         }
 
         int i1 = Math.Min(i + 1, last);
         int j1 = Math.Min(j + 1, last);
         double tx = gridX - i;
         double tz = gridZ - j;
-        double bottom = Lerp(DetailUnits(i, j), DetailUnits(i1, j), tx);
-        double top = Lerp(DetailUnits(i, j1), DetailUnits(i1, j1), tx);
+        double bottom = Lerp(DetailUnits(i, j, coarse), DetailUnits(i1, j, coarse), tx);
+        double top = Lerp(DetailUnits(i, j1, coarse), DetailUnits(i1, j1, coarse), tx);
         return Lerp(bottom, top, tz) * HeightGrid.MetersPerUnit;
+    }
+
+    /// <summary>Whether the game reads the ground at a world position from the 4 m detail heights.</summary>
+    /// <param name="x">The world X, in metres.</param>
+    /// <param name="z">The world Z, in metres.</param>
+    public bool HasDetailAt(double x, double z)
+    {
+        int last = DetailGrid.Resolution - 1;
+        double gridX = Math.Clamp(Finite((x - DetailGrid.OriginX) / DetailGrid.Spacing), 0, last);
+        double gridZ = Math.Clamp(Finite((z - DetailGrid.OriginZ) / DetailGrid.Spacing), 0, last);
+        return DetailTileAt((int)gridX, (int)gridZ) is not null;
     }
 
     private static double Finite(double value) => double.IsNaN(value) ? 0 : value;
@@ -190,7 +212,7 @@ public sealed class CityTerrain : ISectionData
     // The height of detail point (i, j) in 1/64 m, as the game's TerrainManager.GetDetailHeight gives it: from the
     // tile's detail heights, or from the final heights where the tile has none. On a tile's −X or −Z edge next to a
     // tile without detail heights, the final heights apply too, so neighbouring tiles meet without a step.
-    private double DetailUnits(int i, int j)
+    private double DetailUnits(int i, int j, CoarseInterpolation coarse)
     {
         int cells = DetailTileResolution - 1;
         int tileX = Math.Min(i / cells, TilesPerSide - 1);
@@ -205,7 +227,7 @@ public sealed class CityTerrain : ISectionData
         {
             double x = DetailGrid.OriginX + ((double)i * DetailGrid.Spacing);
             double z = DetailGrid.OriginZ + ((double)j * DetailGrid.Spacing);
-            return FinalHeights.SampleUnits(x, z);
+            return coarse == CoarseInterpolation.Bilinear ? FinalHeights.SampleUnits(x, z) : FinalHeights.SampleSmoothUnits(x, z);
         }
 
         return heights![(localZ * DetailTileResolution) + localX];

@@ -16,6 +16,12 @@ public sealed class CityWater : ISectionData
     /// <summary>The height of one stored unit of ground and depth, in metres.</summary>
     public const double MetersPerUnit = WaterSection.MetersPerHeightUnit;
 
+    /// <summary>
+    /// How far below a cell's surface (ground plus depth) the game draws the water, in 1/64 m: 20 units, 0.3125 m.
+    /// Cells with no more water than this show none (docs/research/cs1-save-and-world.md, Water).
+    /// </summary>
+    public const int DrawnOffsetUnits = 20;
+
     // The area of one cell: a point of the grid stands for a square of one spacing.
     private readonly double _cellAreaSquareMeters;
     private readonly ushort[] _ground;
@@ -140,6 +146,21 @@ public sealed class CityWater : ISectionData
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)j, (uint)Grid.Resolution, nameof(j));
         int k = (j * Grid.Resolution) + i;
         return _depth[k] == 0 ? null : (_ground[k] + _depth[k]) * MetersPerUnit;
+    }
+
+    /// <summary>
+    /// Returns where the game draws a cell's water, in metres: <see cref="DrawnOffsetUnits"/> below its surface;
+    /// <see langword="null"/> where the cell has too little water to show (docs/research/cs1-save-and-world.md, Water).
+    /// </summary>
+    /// <param name="i">The cell's column, along X.</param>
+    /// <param name="j">The cell's row, along Z.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The cell is outside the grid.</exception>
+    public double? DrawnSurfaceAt(int i, int j)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)i, (uint)Grid.Resolution, nameof(i));
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)j, (uint)Grid.Resolution, nameof(j));
+        int k = (j * Grid.Resolution) + i;
+        return _depth[k] <= DrawnOffsetUnits ? null : (_ground[k] + _depth[k] - DrawnOffsetUnits) * MetersPerUnit;
     }
 
     private static double Finite(double value) => double.IsNaN(value) ? 0 : value;

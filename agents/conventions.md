@@ -80,7 +80,7 @@ The game runs mods on Unity 5.6's old Mono with the .NET Framework 3.5 base clas
 
 - Fail fast on unreadable or incompatible input, with a message that names the file, the version found and the version expected.
 - Degrade gracefully on individual objects: skip the object, log a warning with its identity, count it, and include the counts in the conversion report.
-- **Converter:** log through the `Microsoft.Extensions.Logging` abstractions; the first step that logs adds the package. The CLI prints a concise summary and writes a detailed log next to the output.
+- **Converter:** log through the `Microsoft.Extensions.Logging` abstractions; the first step that logs adds the package. Until then, stages return their messages (loading as `LoadMessage`s, D24; a conversion in its `ConversionReport`, D40). The CLI prints a concise summary and writes the details next to the output: `convert` writes `cstobeamng-report.txt` into the level folder, deterministic like every generated file.
 - **Exporter:** write `export.log` in the dump folder, plus `[CsToBeamNG]`-prefixed lines in the game log; `ExportLog` does both. Log problems the exporter handles as warnings, never with `Debug.LogError`: the game collects logged errors for its own error display, and the exporter tells the user itself.
 
 ## Tests

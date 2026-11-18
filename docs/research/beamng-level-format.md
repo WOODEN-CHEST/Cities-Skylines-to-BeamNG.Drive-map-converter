@@ -71,11 +71,13 @@ Written against BeamNG.drive 0.40.5 (native Linux, Vulkan). Official documentati
 - **Heights:** world z = the TerrainBlock's z + stored × maxHeight / 65536. The largest stored value, 65535, is one step below maxHeight. [verified in game: with maxHeight 100, nine probes matched stored / 65536 to five decimals (59.99908 m for 39321, where / 65535 would give 60.00000), and on a 441-point grid the terrain was within 0.61 mm, under half a step, of the intended surface]
   - Stored heights can't be negative.
   - Material index 255 is a hole: no rendering and no collision. Up to 254 materials. [official]
-- **`TerrainBlock` fields:** `terrainFile`, `squareSize` (metres per sample, default 1), `maxHeight`, `materialTextureSet`, and `position` = the lower-left corner. World width ≈ size × squareSize. Object scale is not supported. [official: level_classes/terrainblock; verified in game] Some official levels also set `baseTexSize`, whose meaning we haven't checked.
+- **`TerrainBlock` fields:** `terrainFile`, `squareSize` (metres per sample, default 1), `maxHeight`, `materialTextureSet`, and `position` = the lower-left corner. Object scale is not supported. [official: level_classes/terrainblock; verified in game] Official levels also set `baseTexSize`, about as large as their sample count but at most 4096 (2048 for 2048-sample terrains, 4096 for Italy and Johnson Valley); what it controls we haven't checked. [verified: the official levels' files] The converter writes the same rule.
+- **Extent:** the terrain ends at its last sample line: it covers (size − 1) × squareSize from its position and doesn't wrap. `get_ground_at_point` found ground one sample before the last line and none on it or beyond (`surfaceHeight` 0). [verified in game 2026-11-18, step 1.5: CItyRockville's 4096 × 1 m terrain from x −2048, ground at x 2046, none at 2047 and beyond; likewise in y]
 - **`.terrain.json` is optional:** the game loads the terrain from `terrainFile`; smallgrid ships a `.ter` without one. Ours (the official fields without `heightmapImage`) loads without complaint. [verified]
 - **Sizes:**
   - Power of two from 128 to 8192 (the import rule). A BeamNG team member and users confirm that 8192 works. [official/community: https://beamng.com/posts/979171, https://beamng.com/posts/1761369]
   - Multiple TerrainBlocks: reportedly only one gets collision. [community, uncertain]
+- **A generated 8192 × 8192 terrain at 1 m** (CityPalma's, step 1.5): the `.ter` file is 201 MB; the first load took 16 s, about 10 s of it cooking the five terrain materials, later loads 3 to 4 s. At the spawn, 3 m above the ground, the game used 1.52 GB of video memory (the 1024-sample hello level: 1.15 GB), about 0.8 ms of render and 0.6 ms of shadow time per frame (capped at 60 fps) and 3.5 GB of RAM. CItyRockville's 4096 × 1 m terrain: 1.27 GB, 0.95 and 0.59 ms, 2.8 GB. `get_ground_at_point` agreed with the stored samples within 2.7 mm at 75 points per level (height steps of 5.8 and 2.1 mm). [verified in game 2026-11-18, 0.40.5 on the GTX 980 Ti]
 - **Reference sizes** [verified]:
   - Italy: 4096 samples, about 4.1 km.
   - Johnson Valley: 4096 × 0.75 m, about 3.1 km.
@@ -97,6 +99,7 @@ Written against BeamNG.drive 0.40.5 (native Linux, Vulkan). Official documentati
 - **Texture set:** `baseTexSize`, `macroTexSize` and `detailTexSize` give the pixel sizes of the three texture arrays, and the textures must have those sizes. Official levels use base 2048 or 4096 (their own maps) and 1024 for macro and detail. [verified] The hello level uses 512, 1024 and 1024. [verified in game]
 - **Cooking:** at the first load the game packs the material textures into BC7 DDS files in `<user folder>/temp/art/terrainmaterialcache/` (about 14 s for two materials on this machine); later loads take about 1 s. [verified in game]
 - **Textures in general:** PNG, power of two, matching the set's sizes. [official]
+- **Materials the converter uses** (`TerrainMaterialPresets`), all by path and none copied: grass, dirt, rock, sand and asphalt. Each takes its base layer from the template level's baked base maps (`/levels/template/art/terrains/t_terrain_base_{grass,dirt,rock,sand,asphalt}_*.png`, 512 × 512) and its macro and detail layers from the shared textures (1024 × 1024: `soil/macro_clumply`, `soil/dirt_crumbly`, `rock/macro_rocky`, `sand/t_macro_sand`, `sand/t_sand`, ...), except rock's detail layer, which uses the template's own `t_rocks_pac` textures (1024 × 1024) as the template's rock does. The template's materials of the same kinds give the blend settings. All five cooked and rendered as expected: rock on cliffs, sand along shores, dirt patches, grass. [verified in game 2026-11-18, step 1.5]
 
 ## Meshes
 
@@ -144,10 +147,16 @@ Written against BeamNG.drive 0.40.5 (native Linux, Vulkan). Official documentati
 
 ## Water
 
-[official: level_classes/water]
+[official: level_classes/water, unless tagged otherwise]
 
-- `WaterPlane`: infinite; only z matters.
-- `WaterBlock`: a finite box, split internally when large.
+- `WaterPlane`: infinite; only z matters. Official levels put it at x = y = 0. Raycasts hit its surface (normal up). For vehicles, water starts at its z: nodes up to 0.09 m above it counted as wet, none from 0.15 m (waves or node size). [verified in game 2026-11-18, step 1.5: CityPalma's sea plane at 59.6865 m]
+- `WaterBlock`: a finite box, split internally when large. [verified in game 2026-11-18, step 1.5, with a vehicle's `obj:inWater` and the object's world box:]
+  - `position` is the middle of the water surface and `scale` the box's width, length and height. The box is centred on the position (its world box reaches `scale`'s z / 2 above and below it), but only its lower half holds water: the surface is at the position's z, and vehicle nodes deeper than `scale`'s z / 2 below it are dry. So a block for water d deep needs a `scale` z of 2d.
+  - The game lays the surface in whole squares of `gridElementSize` and draws nothing of a remainder at the box's edge (comment in the game's own editor tool, `lua/ge/extensions/editor/toolUtilities/siteWater.lua`). [verified: the game's Lua]
+- **Overlapping water:** where the sea plane lies under a lake's water block (the lake's bed below the sea's surface), the game doesn't draw the lake's surface over that part: from above, the lake's bed showed through. Raising the bed above the sea plane there fixed it. [verified in game 2026-11-18, step 1.5: CityPalma's lake at 108 m over a bed reaching 46 m, with the sea plane at 59.7 m]
+- **Shared water assets:** `cubemap_ocean_reflection` is the only water reflection cubemap defined globally (`art/cubemaps/` in `gameengine.zip`; the others belong to their levels). Depth colour ramps, foam and ripple textures are shared in `/assets/materials/tileable/water/` (`depthcolor_ramp/*.png`, `water_effects/*.dds`). Italy's ocean (`WaterPlane` `Ocean1`) and quarry ponds (`WaterBlock`) use only these. [verified: the game's files] The converter's sea and lakes copy those objects' settings (`WaterStyles`); in game they render as expected. [verified in game 2026-11-18]
+- **Field groups:** the editor saves the indexed wave, ripple and foam fields as arrays of objects named `"Waves (vertex undulation)"`, `"Ripples (texture animation)"` and `"Foam"`; the loader reads them in that form. [verified: official levels and in game]
+- `be:getSurfaceHeightBelow` (Lua) ignores water: over a lake it returns the bed. `obj:inWater(node)` in vehicle Lua updates only when physics steps. [verified in game 2026-11-18]
 - `River`:
   - a Catmull-Rom spline with nodes `[x,y,z,width,depth,nx,ny,nz]`;
   - width 0.25–1000, depth 0.25–500;
@@ -159,4 +168,5 @@ Written against BeamNG.drive 0.40.5 (native Linux, Vulkan). Official documentati
 - The static decal file format (`main.decals.json`).
 - Whether our own generated base maps (flat-colour PNGs) work as well as the template's, for terrain that follows the city (Phase 1).
 - What `TerrainBlock.baseTexSize` controls.
+- A dark, water-coloured spot that the 8192-sample CityPalma terrain showed over dry ground only from 9 km up (at (2467, 286); the stored heights there are 68 to 97 m, collision agrees, closer views show grass): probably a far-distance rendering effect.
 - Whether a mod folder created while the game runs appears in the level list without a restart.

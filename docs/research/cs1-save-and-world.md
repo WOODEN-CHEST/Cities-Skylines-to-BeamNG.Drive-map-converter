@@ -93,6 +93,13 @@
   - Fields: `m_inputPosition` and `m_outputPosition`; `m_type` (1 natural, from the map editor; 2 a building's, such as a water pumping station's intake or a sewage outlet; 3 a water treatment plant's); `m_target`, the water surface height the source works towards, in 1/64 m (the map editor's water tool stores the clicked height × 64); and `m_water`, `m_pollution`, `m_inputRate`, `m_outputRate` and `m_flow`.
   - Each water step resets `m_flow`, and a natural source's water and pollution. An intake takes the water above the higher of its target and the ground within a radius of √rate × 0.4 + 10 m (at most 50 m for buildings); an outlet adds water within a similar radius, a natural one only where the surface is below its target.
 - **In game:** CityPalma has 380,309 wet cells (97 km²) and 10 sources (5 natural, 5 of buildings); CItyRockville 538,040 wet cells (138 km²) and 29 sources (27 natural, 2 of buildings).
+- **Bodies of water** [verified 2026-11-18 in the dumps of step 1.4, counting cells with more than the drawn offset of water]:
+  - The sea's surface (ground plus depth) varies by a few metres around the sea level, presumably waves: CityPalma's sea cells lie mostly between 57 and 63 m around its 60 m, with a few further off near river mouths.
+  - Rivers run through level pools: stretches where most cells lie within half a metre of one level, separated by steps. The largest pool on the two maps has 3,100 cells.
+  - Lakes are flat: CityPalma's lake in the north-east, which no river touches (3,666 cells), has 85 % of its cells within 0.5 m of its median level, 108.3 m, and spreads from 107.2 to 109.4 m.
+  - Rivers also flow through lakes: CityPalma's lake in the north (10,635 cells at 126 to 127 m), and CItyRockville's northern water (327,487 cells at 113 to 114 m). That one reaches the map's northern edge and is kept there by 22 natural sources along it, 68 m above the sea level: water at the map's edge isn't always the sea.
+  - Dry cells whose drawn ground lies below the sea level: 194 within CityPalma's level area and 1 within CItyRockville's. Their block heights, the water's ground, lie at about the sea level or above (59.6 to 67 m among CityPalma's lowest, 102 m for CItyRockville's), so buildings stand there, such as piers and harbour buildings on the sea floor, and keep the water out.
+  - How the converter sorts the water: [architecture.md, D39](../architecture.md#decision-log).
 
 ## Instance limits (vanilla)
 

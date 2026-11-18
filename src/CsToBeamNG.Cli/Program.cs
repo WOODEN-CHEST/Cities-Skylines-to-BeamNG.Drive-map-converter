@@ -12,6 +12,7 @@ internal static class Program
         rootCommand.Subcommands.Add(DoctorCommand.Create());
         rootCommand.Subcommands.Add(ExportCommand.Create());
         rootCommand.Subcommands.Add(InspectCommand.Create());
+        rootCommand.Subcommands.Add(ConvertCommand.Create());
         rootCommand.Subcommands.Add(DevCommand.Create());
 
         // Without arguments, show the help instead of silently doing nothing.

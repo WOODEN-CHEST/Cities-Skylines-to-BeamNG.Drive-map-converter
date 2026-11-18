@@ -97,6 +97,39 @@ public sealed class CityTerrainTests
     }
 
     [Fact]
+    public void SmoothsOnlyTheCoarseHeights()
+    {
+        // A bent final surface, so the smooth and the bilinear reading differ between the 8 m points.
+        var terrain = new CityTerrain(TestTerrain.Create((x, z) => 0, (x, z) => 20 + ((x * x) / 64))
+            .WithDetail(_centre, (x, z) => 30 + x));
+
+        // Away from detail tiles: the final heights, smoothed.
+        Assert.Equal(terrain.FinalHeights.SampleSmooth(-30.5, 17), terrain.SampleGround(-30.5, 17, CoarseInterpolation.MonotoneCubic));
+        Assert.NotEqual(terrain.SampleGround(-30.5, 17), terrain.SampleGround(-30.5, 17, CoarseInterpolation.MonotoneCubic), Tolerance);
+        Assert.Equal(terrain.SampleGround(-30.5, 17), terrain.SampleGround(-30.5, 17, CoarseInterpolation.Bilinear));
+
+        // Inside the detail tile, away from its edges next to tiles without detail: the detail heights, unchanged.
+        Assert.Equal(terrain.SampleGround(1.5, 2.75), terrain.SampleGround(1.5, 2.75, CoarseInterpolation.MonotoneCubic));
+        Assert.True(terrain.HasDetailAt(1.5, 2.75));
+        Assert.False(terrain.HasDetailAt(-30.5, 17));
+    }
+
+    [Fact]
+    public void SmoothCoarseHeightsMeetTheDetailTileWithoutAStep()
+    {
+        var terrain = new CityTerrain(TestTerrain.Create((x, z) => 0, (x, z) => 20 + ((x * x) / 64) + (z / 4))
+            .WithDetail(_centre, (x, z) => 30));
+
+        // The tile's −X edge takes the final heights, smoothed, like the tile beside it.
+        foreach (double z in new[] { -6.5, -1, 3.25 })
+        {
+            double outside = terrain.SampleGround(-8 - 1e-7, z, CoarseInterpolation.MonotoneCubic);
+            double inside = terrain.SampleGround(-8 + 1e-7, z, CoarseInterpolation.MonotoneCubic);
+            Assert.Equal(outside, inside, 1e-4);
+        }
+    }
+
+    [Fact]
     public void RejectsDetailTilesThatDontSpanTheDetailGrid()
     {
         TerrainSectionContent content = TestTerrain.Create((x, z) => 0, (x, z) => 0);

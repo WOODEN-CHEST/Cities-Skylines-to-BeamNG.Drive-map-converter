@@ -6,7 +6,7 @@ using CsToBeamNG.Converter.World;
 namespace CsToBeamNG.Converter.Rendering.Layers;
 
 /// <summary>
-/// Draws the terrain: the ground the game draws (<see cref="CityTerrain.SampleGround"/>), tinted by height and shaded
+/// Draws the terrain: the ground the game draws (<see cref="CityTerrain.SampleGround(double, double)"/>), tinted by height and shaded
 /// with light from the north-west, so slopes, embankments and cuts show.
 /// </summary>
 public sealed class HillshadeLayer : IRenderLayer

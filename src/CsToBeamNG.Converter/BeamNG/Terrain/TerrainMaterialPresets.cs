@@ -9,7 +9,8 @@ namespace CsToBeamNG.Converter.BeamNG.Terrain;
 /// <remarks>
 /// <para>
 /// The macro and detail layers use the game's shared textures in <c>/assets/materials/terrain/</c> (1024 × 1024
-/// pixels). The base layer needs baked, nearly uniform maps: the game draws the material's overall colour from it,
+/// pixels); rock's detail layer uses the template level's own rock textures (also 1024 × 1024), as the template's rock
+/// does. The base layer needs baked, nearly uniform maps: the game draws the material's overall colour from it,
 /// and the macro and detail layers only modulate that. Every official level bakes its own; macro textures in the
 /// base slot render grey or magenta (verified in 0.40.5; docs/research/beamng-level-format.md, Terrain materials).
 /// These presets therefore borrow the official template level's base maps (512 × 512) by their absolute virtual
@@ -26,7 +27,8 @@ public static class TerrainMaterialPresets
     public const int SharedTextureSize = 1024;
 
     private const string SharedTextures = "/assets/materials/terrain/";
-    private const string TemplateBaseTextures = "/levels/template/art/terrains/t_terrain_base_";
+    private const string TemplateTextures = "/levels/template/art/terrains/";
+    private const string TemplateBaseTextures = TemplateTextures + "t_terrain_base_";
 
     /// <summary>Short grass.</summary>
     /// <param name="internalName">The name the <c>.ter</c> file uses.</param>
@@ -78,6 +80,78 @@ public static class TerrainMaterialPresets
         DetailDistances = new Vector4(0, 0, 30, 50),
     };
 
+    /// <summary>Bare, crumbly dirt.</summary>
+    /// <param name="internalName">The name the <c>.ter</c> file uses.</param>
+    /// <returns>The material.</returns>
+    public static TerrainMaterial Dirt(string internalName) => new()
+    {
+        InternalName = internalName,
+        GroundModelName = "DIRT",
+        Base = TemplateBaseLayer("dirt", textureSize: 512),
+        Macro = SharedLayer("soil/macro_clumply/t_macro_clumpy", textureSize: 80) with
+        {
+            BaseColor = SharedMap("soil/macro_clumply/t_macro_clumpy_b", new(0.3f, 0.3f)),
+            Normal = SharedMap("soil/macro_clumply/t_macro_clumpy_nm", new(0.5f, 0.2f)),
+            Roughness = SharedMap("soil/macro_clumply/t_macro_clumpy_r", new(0.5f, 1)),
+        },
+        Detail = SharedLayer("soil/dirt_crumbly/t_dirt_crumbly", textureSize: null) with
+        {
+            AmbientOcclusion = SharedMap("soil/dirt_crumbly/t_dirt_crumbly_ao", new(1, 0)),
+            BaseColor = SharedMap("soil/dirt_crumbly/t_dirt_crumbly_b", new(0.25f, 0)),
+            Normal = SharedMap("soil/dirt_crumbly/t_dirt_crumbly_nm", new(0.8f, 0)),
+            Roughness = SharedMap("soil/dirt_crumbly/t_dirt_crumbly_r", new(1, 0)),
+        },
+        MacroDistances = new Vector4(0, 10, 100, 3000),
+        DetailDistances = new Vector4(0, 0, 30, 60),
+    };
+
+    /// <summary>Rock, for cliffs and steep slopes.</summary>
+    /// <param name="internalName">The name the <c>.ter</c> file uses.</param>
+    /// <returns>The material.</returns>
+    public static TerrainMaterial Rock(string internalName) => new()
+    {
+        InternalName = internalName,
+        GroundModelName = "ROCK",
+        Annotation = "ROCK",
+        Base = TemplateBaseLayer("rock", textureSize: 128),
+        Macro = SharedLayer("rock/macro_rocky/t_macro_rocky", textureSize: 40) with
+        {
+            BaseColor = SharedMap("rock/macro_rocky/t_macro_rocky_b", new(0.2f, 0.4f)),
+            Normal = SharedMap("rock/macro_rocky/t_macro_rocky_nm", new(0.4f, 1)),
+            Roughness = SharedMap("rock/macro_rocky/t_macro_rocky_r", new(0.15f, 0.5f)),
+        },
+        Detail = TemplateLayer("t_rocks_pac", textureSize: null) with
+        {
+            BaseColor = TemplateMap("t_rocks_pac_b", new(0.3f, 0.25f)),
+            Normal = TemplateMap("t_rocks_pac_nm", new(0.6f, 0.15f)),
+            Roughness = TemplateMap("t_rocks_pac_r", new(0.3f, 0.3f)),
+        },
+        MacroDistances = new Vector4(0, 10, 100, 3000),
+    };
+
+    /// <summary>Sand, for beaches and the ground under water.</summary>
+    /// <param name="internalName">The name the <c>.ter</c> file uses.</param>
+    /// <returns>The material.</returns>
+    public static TerrainMaterial Sand(string internalName) => new()
+    {
+        InternalName = internalName,
+        GroundModelName = "SAND",
+        Base = TemplateBaseLayer("sand", textureSize: 512),
+        Macro = SharedLayer("sand/t_macro_sand/t_macro_sand", textureSize: 50) with
+        {
+            BaseColor = SharedMap("sand/t_macro_sand/t_macro_sand_b", new(0.2f, 0.5f)),
+            Normal = SharedMap("sand/t_macro_sand/t_macro_sand_nm", new(0.6f, 0.8f)),
+            Roughness = SharedMap("sand/t_macro_sand/t_macro_sand_r", new(0.15f, 0.8f)),
+        },
+        Detail = SharedLayer("sand/t_sand/t_sand", textureSize: null) with
+        {
+            BaseColor = SharedMap("sand/t_sand/t_sand_b", new(0.25f, 0.25f)),
+            Normal = SharedMap("sand/t_sand/t_sand_nm", new(0.7f, 0.15f)),
+            Roughness = SharedMap("sand/t_sand/t_sand_r", new(0.3f, 0.3f)),
+        },
+        MacroDistances = new Vector4(0, 10, 100, 3000),
+    };
+
     /// <summary>A texture set that fits these presets.</summary>
     /// <param name="name">The set's name.</param>
     /// <returns>The texture set.</returns>
@@ -105,7 +179,21 @@ public static class TerrainMaterialPresets
         Height = SharedMap(prefix + "_h", strength: null),
     };
 
+    // All five maps of one of the template level's own texture families (1024 × 1024), named <prefix>_b, _nm, _r, _ao
+    // and _h, without strengths.
+    private static TerrainMaterialLayer TemplateLayer(string prefix, float? textureSize) => new()
+    {
+        TextureSize = textureSize,
+        BaseColor = TemplateMap(prefix + "_b", strength: null),
+        Normal = TemplateMap(prefix + "_nm", strength: null),
+        Roughness = TemplateMap(prefix + "_r", strength: null),
+        AmbientOcclusion = TemplateMap(prefix + "_ao", strength: null),
+        Height = TemplateMap(prefix + "_h", strength: null),
+    };
+
     private static TerrainMaterialMap SharedMap(string texture, Vector2? strength) => Map(SharedTextures + texture, strength);
+
+    private static TerrainMaterialMap TemplateMap(string texture, Vector2? strength) => Map(TemplateTextures + texture, strength);
 
     private static TerrainMaterialMap Map(string texture, Vector2? strength) =>
         new(VirtualPath.Parse(texture + ".png")) { Strength = strength };
